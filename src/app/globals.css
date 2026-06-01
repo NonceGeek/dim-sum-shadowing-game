@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+:root {
+  background-color: #181b1f;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--primary-gradient);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: white;
+}
+
+.glass-card {
+  background: rgba(25, 25, 45, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.recording-pulse {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 75, 43, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(255, 75, 43, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 75, 43, 0);
+  }
+}
+
+.score-spin {
+  animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.circle-container {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+.outer-circle {
+  width: 30px;
+  height: 30px;
+  background-color: #8f959e; /* 外层颜色 */
+  border-radius: 50%;
+  position: absolute;
+}
+
+.inner-circle-active {
+  width: 15px; /* 内层直径是外层的一半 */
+  height: 15px;
+  background-color: #8ee085; /* 内层颜色 */
+  border-radius: 50%;
+  position: absolute;
+  top: 50%; /* 垂直居中 */
+  left: 50%; /* 水平居中 */
+  transform: translate(-50%, -50%); /* 精确居中 */
+}
+
+.inner-circle-inactive {
+  width: 15px; /* 内层直径是外层的一半 */
+  height: 15px;
+  background-color: #181b1f; /* 内层颜色 */
+  border-radius: 50%;
+  position: absolute;
+  top: 50%; /* 垂直居中 */
+  left: 50%; /* 水平居中 */
+  transform: translate(-50%, -50%); /* 精确居中 */
+}
+
+.catergory-container {
+  height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+
+.game-quiz-warpper div:first-child {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.game-quiz-warpper > div > ul {
+  width: 24px;
+  height: 24px;
+  margin: 3px;
+  background-color: #8f959e;
+}
+
+
+@keyframes fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(10deg);
+    opacity: 0;
+  }
+}
+
+@keyframes explode {
+  0% {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes fireworkTrail {
+  0% {
+    transform: rotate(var(--rotation)) translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--rotation)) translateX(100px);
+    opacity: 0;
+  }
+}
+
+@keyframes textPop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+    text-shadow: 0 0 50px rgba(255, 255, 255, 0.8);
+  }
+  70% {
+    transform: scale(1.1);
+    opacity: 1;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.7);
+  }
+}
+
+@keyframes fadeInStars {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
