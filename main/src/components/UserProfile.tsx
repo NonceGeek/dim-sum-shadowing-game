@@ -1,10 +1,16 @@
 import React from "react";
+import classNames from "classnames";
 
 const DEFAULT_AVATAR_SRC = "/default_avatar.png";
 
-const UserProfile = () => {
+const UserProfile = ({ className }: { className?: string }) => {
   return (
-    <div className="user-profile-wrapper flex mx-5 py-4 items-center">
+    <div
+      className={classNames(
+        "user-profile-wrapper flex mx-5 py-4 items-center",
+        className
+      )}
+    >
       <div
         id="avator"
         className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-100 ring-2 ring-amber-300"

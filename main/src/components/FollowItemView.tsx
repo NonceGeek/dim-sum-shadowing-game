@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Game from "@/components/Game";
 import { useQuestionStore } from "@/stores/questionStore";
 import classNames from "classnames";
+import { fetchJyutpingContent } from "@/utils/jyutpingApi";
 
 interface Question {
   content?: string;
@@ -15,22 +16,47 @@ interface Question {
 
 export default function FollowItemView({
   questions,
+  backHref = "/",
 }: {
   questions: Question[];
+  backHref?: string;
 }) {
   const router = useRouter();
   const [quesNumber, setQuesNumber] = useState(0);
   const [isAudoSlowSpeed, setIsAudoSlowSpeed] = useState(false);
   const [hasResult, setResult] = useState(false);
+  const [displayContent, setDisplayContent] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const { setCurrentQuestion } = useQuestionStore();
 
   useEffect(() => {
-    setCurrentQuestion(questions[0] ?? null);
-  }, [questions, setCurrentQuestion]);
+    setCurrentQuestion(questions[quesNumber] ?? null);
+  }, [questions, quesNumber, setCurrentQuestion]);
+
+  useEffect(() => {
+    const q = questions[quesNumber];
+    if (!q) {
+      setDisplayContent("");
+      return;
+    }
+
+    const sourceText = q.yueText?.trim() || q.content?.trim() || "";
+    setDisplayContent(q.content ?? sourceText);
+
+    if (!sourceText) return;
+
+    let cancelled = false;
+    fetchJyutpingContent(q.yueText?.trim() || sourceText).then((content) => {
+      if (!cancelled) setDisplayContent(content);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [questions, quesNumber]);
 
   const goBack = () => {
-    router.push("/follow");
+    router.push(backHref);
   };
 
   const playAudio = () => {
@@ -62,10 +88,10 @@ export default function FollowItemView({
             <p>{currentQ?.originalText}</p>
           </div>
           <div
-            key={currentQ?.content}
+            key={`${quesNumber}-${displayContent}`}
             className="text-item mt-4 py-4 px-3 border-3 rounded-2xl border-green-200 relative text-lg leading-12 font-bold"
           >
-            {currentQ?.content}
+            {displayContent}
             <div
               className="audio-icon text-2xl z-1000 h-[24px]"
               onClick={playAudio}

@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import WaveSurfer from "wavesurfer.js";
-import { Tooltip } from "antd";
+import { Tooltip, Progress } from "antd";
 import { useQuestionStore } from "@/stores/questionStore";
 import { IoPulseSharp } from "react-icons/io5";
 
-const TRANS_API = "https://api.scaffold-agent-homepage.leeduckgo.com/api/trans_cantonese";
+const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
 
 interface WaveRecorderProps {
   onRecordingComplete: (score: number, feedback: string, transcript: string, yueText: string) => void;
@@ -20,6 +20,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   ({ onRecordingComplete }, ref) => {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [transcribeProgress, setTranscribeProgress] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [duration, setDuration] = useState(0);
@@ -45,6 +46,25 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   };
 
   useImperativeHandle(ref, () => ({ reset: resetState }));
+
+  const TRANSCRIBE_PROGRESS_MS = 15_000;
+
+  useEffect(() => {
+    if (!transcribing) {
+      setTranscribeProgress(0);
+      return;
+    }
+
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(100, Math.round((elapsed / TRANSCRIBE_PROGRESS_MS) * 100));
+      setTranscribeProgress(pct);
+      if (pct >= 100) clearInterval(interval);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [transcribing]);
 
   // 初始化wavesurfer
   useEffect(() => {
@@ -325,6 +345,17 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
           ></div>
         </div>
       </div>
+      {transcribing && (
+        <div className="mt-3 px-4">
+          <p className="mb-2 text-center text-sm text-green-200">AI 判定中……</p>
+          <Progress
+            percent={transcribeProgress}
+            showInfo={false}
+            strokeColor="#8ee085"
+            trailColor="rgba(255,255,255,0.1)"
+          />
+        </div>
+      )}
       {/* 音频识别结果 */}
       {transcript && (
         <p className="mt-2 text-base text-white text-center">
