@@ -82,7 +82,7 @@ async function handleTranscribe(context: Context) {
     const arrayBuffer: ArrayBuffer = Uint8Array.from(fileBytes).buffer;
     const file = new File([arrayBuffer], filename, { type: mimeType });
 
-    const languageRaw = form.fields?.language ?? "yue";
+    // const languageRaw = form.fields?.language ?? "yue";
     const prompt = form.fields?.prompt;
     const taskRaw = form.fields?.task;
     const task = taskRaw === "translate" ? "translate" : "transcribe";
@@ -97,7 +97,8 @@ async function handleTranscribe(context: Context) {
       {
         file,
         filename,
-        language: String(languageRaw || "").trim() || "yue",
+        language: "zh",
+        // language: String(languageRaw || "").trim() || "yue",
         prompt: prompt ? String(prompt) : undefined,
         task,
       },

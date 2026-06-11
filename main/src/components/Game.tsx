@@ -43,13 +43,17 @@ const Game = forwardRef<
     onResult?.({ transcript, yueText, score, feedback });
   };
 
-  // 重置所有状态（供父组件通过 ref 调用）
-  const resetAll = () => {
+  const resetDisplayState = () => {
     setScore(0);
     setFeedback("");
+    setShowScore(false);
     setTranscript("");
     setYueText("");
-    setShowScore(false);
+  };
+
+  // 重置所有状态（供父组件通过 ref 调用）
+  const resetAll = () => {
+    resetDisplayState();
     recorderRef.current?.reset();
   };
 
@@ -63,7 +67,7 @@ const Game = forwardRef<
       <WaveRecorder
         ref={recorderRef}
         onRecordingComplete={handleRecordingComplete}
-        onReset={resetAll}
+        onReset={resetDisplayState}
       />
       {showScore && <ScoreDisplay score={score} feedback={feedback} />}
     </main>

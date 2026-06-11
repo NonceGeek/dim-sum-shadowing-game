@@ -26,7 +26,7 @@ Browse this file in the browser:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `API_KEY` | For transcription | OpenRouter API key |
-| `OPENROUTER_TRANSCRIPTION_MODEL` | No | Default: `qwen/qwen3-asr-flash-2026-02-10` |
+| `OPENROUTER_TRANSCRIPTION_MODEL` | No | Default: `qwen/qwen3-asr-flash-2026-02-10` (OpenRouter STT) |
 | `OPENROUTER_HTTP_REFERER` | No | Optional OpenRouter `HTTP-Referer` header |
 | `OPENROUTER_SITE_TITLE` | No | Optional OpenRouter `X-OpenRouter-Title` header |
 | `SUPABASE_URL` | For `/api/libs` | Supabase project URL |
@@ -129,23 +129,39 @@ https://api.shadowing.app.aidimsum.com/docs/html
 
 ### `POST /api/transcribe`
 
-Transcribe Cantonese audio via OpenRouter STT (`/v1/audio/transcriptions`).  
-Legacy alias: `POST /api/trans_cantonese`
+Transcribe Cantonese (or other Chinese) speech to text via [OpenRouter](https://openrouter.ai) STT.
+
+The server accepts your upload as `multipart/form-data`, reads the audio into memory (max **25 MB**), base64-encodes it, and calls OpenRouter **`POST /v1/audio/transcriptions`** with an `input_audio` payload. This in-memory path works on Deno Deploy (no temp files).
+
+Legacy alias: `POST /api/trans_cantonese` (same handler).
 
 **Content-Type:** `multipart/form-data`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `file` | Yes | Audio file (wav, mp3, m4a, webm, …) |
-| `language` | No | Default `yue` |
-| `prompt` | No | Optional context hint |
+| `file` | Yes | Audio file. Supported extensions / formats: `wav`, `mp3`, `m4a`, `flac`, `ogg`, `aac`, `aiff`, `webm`, `pcm16`, `pcm24` |
+| `prompt` | No | Optional context hint (used only when `task=translate`) |
 | `task` | No | `transcribe` (default) or `translate` |
+
+**Language:** Transcription always sends `language: "zh"` to OpenRouter (Cantonese / Chinese). A `language` form field is accepted by some clients but is **not** currently applied by the server.
+
+**Default model:** `OPENROUTER_TRANSCRIPTION_MODEL` env var, default `qwen/qwen3-asr-flash-2026-02-10`.
+
+**`task=translate`:** OpenRouter’s STT endpoint is transcribe-only. When `task=translate`, the server falls back to **`POST /v1/chat/completions`** with the same audio as `input_audio` and returns an English translation.
 
 ```bash
 curl -X POST http://localhost:3003/api/transcribe \
   -F "file=@public/audio/yue1.m4a" \
-  -F "language=yue" \
   -F "task=transcribe"
+```
+
+Translate to English:
+
+```bash
+curl -X POST http://localhost:3003/api/transcribe \
+  -F "file=@public/audio/yue1.m4a" \
+  -F "task=translate" \
+  -F "prompt=Casual Cantonese conversation"
 ```
 
 **Response** `200`
@@ -158,10 +174,14 @@ curl -X POST http://localhost:3003/api/transcribe \
 
 **Errors**
 
-| Status | Reason |
-|--------|--------|
-| `400` | Missing `file` |
-| `500` | Missing `API_KEY` or transcription failed |
+| Status | Body | Reason |
+|--------|------|--------|
+| `400` | `{ "error": "multipart field 'file' is required" }` | Missing `file` |
+| `400` | `{ "error": "could not read uploaded file" }` | Upload could not be read |
+| `500` | `{ "error": "Missing API_KEY" }` | `API_KEY` not set |
+| `500` | `{ "error": "..." }` | OpenRouter or server error (message in `error`) |
+
+Requires env var **`API_KEY`** (OpenRouter API key). Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_SITE_TITLE`.
 
 ---
 
@@ -420,7 +440,7 @@ curl -X DELETE http://localhost:3003/api/libs/1 \
 | GET | `/health` | — | Health check |
 | GET | `/docs` | — | API docs (Markdown) |
 | GET | `/docs/html` | — | API docs (HTML) |
-| POST | `/api/transcribe` | `API_KEY` | Transcribe audio |
+| POST | `/api/transcribe` | `API_KEY` | Transcribe audio (OpenRouter STT, max 25 MB) |
 | POST | `/api/trans_cantonese` | `API_KEY` | Transcribe (legacy alias) |
 | GET/POST | `/api/to_jyutping` | — | Text → Jyutping |
 | GET | `/api/libs` | — | List libraries |

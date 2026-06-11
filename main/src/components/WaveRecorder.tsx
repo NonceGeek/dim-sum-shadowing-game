@@ -3,9 +3,14 @@ import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } f
 import WaveSurfer from "wavesurfer.js";
 import { Tooltip, Progress } from "antd";
 import { useQuestionStore } from "@/stores/questionStore";
+import { calculateTextSimilarity } from "@/utils/textSimilarity";
 import { IoPulseSharp } from "react-icons/io5";
 
 const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
+// 静音判定，终端两秒后没有声音则认为静音
+const SILENCE_THRESHOLD = 8;
+const SILENCE_DURATION_MS = 2000;
+
 
 interface WaveRecorderProps {
   onRecordingComplete: (score: number, feedback: string, transcript: string, yueText: string) => void;
@@ -17,7 +22,7 @@ export interface WaveRecorderHandle {
 }
 
 const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
-  ({ onRecordingComplete }, ref) => {
+  ({ onRecordingComplete, onReset }, ref) => {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeProgress, setTranscribeProgress] = useState(0);
@@ -36,16 +41,17 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const timerRef = useRef<any>(null);
   const animationRef = useRef<any>(null);
   const playProgressRef = useRef<any>(null);
+  const recordingRef = useRef(false);
+  const lastSoundAtRef = useRef(0);
+  const hasSpeechRef = useRef(false);
+  const skipTranscribeRef = useRef(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  const resetState = () => {
-    setAudioUrl("");
-    setTranscript("");
-    setPlaying(false);
-    setDuration(0);
-    setAudioBlob(null);
+  const pickRecorderMimeType = () => {
+    const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"];
+    return types.find((type) => MediaRecorder.isTypeSupported(type));
   };
-
-  useImperativeHandle(ref, () => ({ reset: resetState }));
 
   const TRANSCRIBE_PROGRESS_MS = 15_000;
 
@@ -104,16 +110,6 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       clearInterval(playProgressRef.current);
     };
   }, [audioUrl]);
-
-  const calculateSimilarity = (text1: string, text2: string): number => {
-    // 简单的文本相似度计算
-    // 实际项目中可以使用更复杂的算法
-    const set1 = new Set(text1.split(""));
-    const set2 = new Set(text2.split(""));
-    const intersection = new Set([...set1].filter((x) => set2.has(x)));
-    const score = (intersection.size / Math.max(set1.size, set2.size)) * 2;
-    return score; // 返回百分比
-  };
 
   const generateFeedback = (score: number): string => {
     // 生成简单反馈
@@ -201,8 +197,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       console.log("transcript", transcript);
       console.log("yueText", yueText);
 
-      const score = calculateSimilarity(transcript, yueText);
-      const finalScore = Math.min(100, Math.max(Math.round(score * 100), 60));
+      const finalScore = calculateTextSimilarity(transcript, yueText ?? "");
       const feedback = generateFeedback(finalScore);
       onRecordingComplete(finalScore, feedback, transcript, yueText);
     } catch (err) {
@@ -215,12 +210,59 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     }
   };
 
+  // 停止录音（静音超时或内部调用）
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current || !recordingRef.current) return;
+
+    recordingRef.current = false;
+    setRecording(false);
+    cancelAnimationFrame(animationRef.current);
+    clearInterval(timerRef.current);
+    audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+
+    if (waveformRef.current) {
+      waveformRef.current.style.boxShadow = "";
+    }
+
+    if (mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const resetState = () => {
+    if (recordingRef.current) {
+      skipTranscribeRef.current = true;
+      stopRecording();
+    }
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+    setTranscript("");
+    setPlaying(false);
+    setDuration(0);
+    setAudioBlob(null);
+    onReset?.();
+  };
+
+  useImperativeHandle(ref, () => ({ reset: resetState }));
+
   // 开始录音
   const startRecording = async () => {
+    if (recordingRef.current || transcribing) return;
+
+    // 评分完成后再次点击录制，先重置上一轮结果（含分数模块）
+    resetState();
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioChunks: any = [];
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      streamRef.current = stream;
+      const audioChunks: Blob[] = [];
+      const mimeType = pickRecorderMimeType();
+      mediaRecorderRef.current = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
 
       mediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -229,43 +271,77 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const blob: any = new Blob(audioChunks, { type: "audio/mp4" });
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+
+        if (skipTranscribeRef.current) {
+          skipTranscribeRef.current = false;
+          return;
+        }
+
+        const blob = new Blob(audioChunks, {
+          type: mimeType || mediaRecorderRef.current?.mimeType || "audio/webm",
+        });
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
-        setAudioBlob(blob);
-        stream.getTracks().forEach((track) => track.stop());
+        setAudioBlob(blob as any);
 
-        // 用 /api/trans_cantonese 替代 SpeechRecognition
         await transcribeAudio(blob);
       };
 
       mediaRecorderRef.current.start();
+      recordingRef.current = true;
       setRecording(true);
+      lastSoundAtRef.current = Date.now();
+      hasSpeechRef.current = false;
 
-      // 计时器
-      let startTime = Date.now();
+      const startTime = Date.now();
       timerRef.current = setInterval(() => {
         setDuration(Math.floor((Date.now() - startTime) / 1000));
       }, 1000);
 
-      // 实时波形更新
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       source.connect(analyser);
       analyser.fftSize = 256;
 
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const getVolume = (samples: Uint8Array) => {
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++) {
+          const v = samples[i] - 128;
+          sum += v * v;
+        }
+        return Math.sqrt(sum / samples.length);
+      };
 
       const drawWaveform = () => {
-        if (!recording) return;
+        if (!recordingRef.current) return;
 
         analyser.getByteTimeDomainData(dataArray);
+        const volume = getVolume(dataArray);
+        const now = Date.now();
 
-        if (wavesurferRef.current) {
-          wavesurferRef.current.empty();
-          wavesurferRef.current.drawBuffer(dataArray);
+        if (volume > SILENCE_THRESHOLD) {
+          hasSpeechRef.current = true;
+          lastSoundAtRef.current = now;
+        } else if (
+          hasSpeechRef.current &&
+          now - lastSoundAtRef.current >= SILENCE_DURATION_MS
+        ) {
+          stopRecording();
+          return;
+        }
+
+        if (waveformRef.current) {
+          const level = Math.min(48, Math.round(volume * 2));
+          waveformRef.current.style.boxShadow = `inset 0 -${level}px 0 rgba(142, 224, 133, 0.45)`;
         }
 
         animationRef.current = requestAnimationFrame(drawWaveform);
@@ -273,16 +349,21 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
       drawWaveform();
     } catch (err) {
-      console.error("录音启动失败:", err);
-      alert("无法访问麦克风，请检查权限设置");
-    }
-  };
-
-  // 停止录音
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
+      recordingRef.current = false;
       setRecording(false);
-      mediaRecorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      console.error("录音启动失败:", err);
+
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        alert("无法访问麦克风，请检查权限设置");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        alert("未找到麦克风设备");
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        alert(`录音启动失败：${message}`);
+      }
     }
   };
 
@@ -306,22 +387,22 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         <div className="flex flex-col">
           <div className="flex space-x-4">
             <Tooltip
-              title={transcribing ? "识别中…" : "点击录制"}
+              title={
+                transcribing ? "识别中…" : recording ? "录音中，停止后将自动识别" : "点击录制"
+              }
               color={"lime"}
               key={"lime"}
               placement="bottom"
               defaultOpen={true}
             >
               <button
-                onClick={recording ? stopRecording : startRecording}
-                disabled={transcribing}
-                className={`px-3 py-2 rounded-full font-bold text-lg  duration-300 ${
-                  recording ? "" : ""
-                }`}
+                onClick={startRecording}
+                disabled={recording || transcribing}
+                className={`px-3 py-2 rounded-full font-bold text-lg duration-300 disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {recording ? (
                   <div className="flex items-center">
-                    <div className="border text-green-200 rounded-full p-1 text-xl">
+                    <div className="border text-green-200 rounded-full p-1 text-xl animate-pulse">
                       <IoPulseSharp />
                     </div>
                   </div>

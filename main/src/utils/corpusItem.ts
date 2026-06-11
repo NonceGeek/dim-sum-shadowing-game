@@ -13,7 +13,10 @@ function audioUrlFromBlock(block: Block | undefined): string {
   return typeof url === "string" ? url : "";
 }
 
-export function transformCorpusItemToQuestion(item: Record<string, unknown>) {
+export function transformCorpusItemToQuestion(
+  item: Record<string, unknown>,
+  options?: { skipJyutpingFetch?: boolean },
+) {
   const data = (item.data as string) || "";
   const note = (item.note as Record<string, unknown>) || {};
   const context = (note.context as Record<string, unknown>) || {};
@@ -55,10 +58,19 @@ export function transformCorpusItemToQuestion(item: Record<string, unknown>) {
     yueQuiz: [],
     yueQuizAnswer: [],
     audioUrl,
+    skipJyutpingFetch: options?.skipJyutpingFetch ?? false,
   };
 }
 
+export type CorpusSource = "backend" | "wu";
+
+export type CorpusFetchResult = {
+  item: Record<string, unknown>;
+  source: CorpusSource;
+};
+
 export const CORPUS_API_BASE = "https://backend.aidimsum.com";
+export const CORPUS_API_BASE_WU="https://wu.api.aidimsum.com";
 
 export async function fetchCorpusItem(uuid: string): Promise<Record<string, unknown>> {
   const url = `${CORPUS_API_BASE}/v2/corpus_item?unique_id=${encodeURIComponent(uuid)}`;
@@ -68,4 +80,29 @@ export async function fetchCorpusItem(uuid: string): Promise<Record<string, unkn
     throw new Error("未找到该语料");
   }
   return data;
+}
+
+export async function fetchCorpusItemFromWU(uuid: string): Promise<Record<string, unknown>> {
+  const url = `${CORPUS_API_BASE_WU}/v2/corpus_item?unique_id=${encodeURIComponent(uuid)}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data || Object.keys(data).length === 0) {
+    throw new Error("未找到该语料");
+  }
+  return data;
+}
+
+/** Try backend and WU APIs in parallel; return the first successful result. */
+export async function fetchCorpusItemFromAny(uuid: string): Promise<CorpusFetchResult> {
+  const results = await Promise.allSettled([
+    fetchCorpusItem(uuid).then((item) => ({ item, source: "backend" as const })),
+    fetchCorpusItemFromWU(uuid).then((item) => ({ item, source: "wu" as const })),
+  ]);
+
+  for (const result of results) {
+    if (result.status === "fulfilled") return result.value;
+  }
+
+  const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+  throw rejected?.reason ?? new Error("未找到该语料");
 }

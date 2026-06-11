@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import FollowItemView from "@/components/FollowItemView";
 import {
-  fetchCorpusItem,
+  fetchCorpusItemFromAny,
   transformCorpusItemToQuestion,
 } from "@/utils/corpusItem";
 
@@ -15,24 +15,27 @@ function FreeShadowingContent() {
   const uuidParam = searchParams.get("uuid")?.trim() ?? "";
 
   const [uuidInput, setUuidInput] = useState(uuidParam);
-  const [item, setItem] = useState<Record<string, unknown> | null>(null);
+  const [fetchResult, setFetchResult] = useState<{
+    item: Record<string, unknown>;
+    source: "backend" | "wu";
+  } | null>(null);
   const [loading, setLoading] = useState(!!uuidParam);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!uuidParam) {
       setLoading(false);
-      setItem(null);
+      setFetchResult(null);
       setError(null);
       return;
     }
 
     setLoading(true);
     setError(null);
-    fetchCorpusItem(uuidParam)
-      .then(setItem)
+    fetchCorpusItemFromAny(uuidParam)
+      .then(setFetchResult)
       .catch((err) => {
-        setItem(null);
+        setFetchResult(null);
         setError(err?.message || "加载失败");
       })
       .finally(() => setLoading(false));
@@ -61,8 +64,10 @@ function FreeShadowingContent() {
         </div>
       );
     }
-    if (item) {
-      const question = transformCorpusItemToQuestion(item);
+    if (fetchResult) {
+      const question = transformCorpusItemToQuestion(fetchResult.item, {
+        skipJyutpingFetch: fetchResult.source === "wu",
+      });
       return <FollowItemView questions={[question]} backHref="/free_shadowing" />;
     }
   }
@@ -81,6 +86,16 @@ function FreeShadowingContent() {
           AI DimSum 粤语语料库
         </a>{" "}
         找到含有音频的任意语料，复制其右上角的 ID 后粘贴到下方，点击「我要跟读」。
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-white/80">或者你想学习吴语，例如上海话？——&nbsp;
+      <a
+          href="https://wu.search.aidimsum.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-green-400 underline decoration-green-500/50 underline-offset-2 hover:text-green-300"
+        >
+          AI DimSum 吴语语料库
+        </a>{" "}
       </p>
       <img
         src="/copy_uuid.png"
@@ -113,6 +128,16 @@ function FreeShadowingContent() {
       </p>
       <p className="mt-3 text-sm leading-relaxed text-white/80">
         * 「落花流水」歌词：8db02d26-598f-436f-9eae-9db680cee90b
+      </p>
+      <br /><br />
+      <p className="mt-3 text-sm leading-relaxed text-white/80">
+        一些吴语的例子：
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-white/80">
+        * "侬是小明对伐"：fcf2c32b-2de2-4fe6-b6cf-714ff61886c8
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-white/80">
+        * "工作老忙额，还要自学英文"：b55daabc-a46b-435a-9127-e665edbe9748
       </p>
       <br /><br />
     </div>

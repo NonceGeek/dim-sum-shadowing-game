@@ -12,6 +12,7 @@ interface Question {
   originalText?: string;
   yueText?: string;
   audioUrl?: string;
+  skipJyutpingFetch?: boolean;
 }
 
 export default function FollowItemView({
@@ -43,7 +44,7 @@ export default function FollowItemView({
     const sourceText = q.yueText?.trim() || q.content?.trim() || "";
     setDisplayContent(q.content ?? sourceText);
 
-    if (!sourceText) return;
+    if (!sourceText || q.skipJyutpingFetch) return;
 
     let cancelled = false;
     fetchJyutpingContent(q.yueText?.trim() || sourceText).then((content) => {
