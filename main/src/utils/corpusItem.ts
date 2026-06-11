@@ -54,9 +54,6 @@ export function transformCorpusItemToQuestion(
     content,
     originalText: originalText || data,
     yueText: data,
-    yueQuizText: `<div>${content}</div>`,
-    yueQuiz: [],
-    yueQuizAnswer: [],
     audioUrl,
     skipJyutpingFetch: options?.skipJyutpingFetch ?? false,
   };

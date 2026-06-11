@@ -450,7 +450,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
             download="recording.wav"
             className="px-4 py-1.5 rounded-full border border-white text-white text-sm hover:bg-white hover:text-neutral-800 transition-colors duration-200"
           >
-            下载录音
+            下载录音（该功能建议在电脑端使用~）
           </a>
           <button
             onClick={resetState}

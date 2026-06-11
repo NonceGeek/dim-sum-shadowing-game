@@ -1,25 +1,20 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { IoVolumeMediumSharp } from "react-icons/io5";
-import { Alert, Table } from "antd";
+import { Table } from "antd";
 import { useRouter } from "next/navigation";
-import classNames from "classnames";
-import DOMPurify from "dompurify";
 import category from "@/data/category";
 import categoryGfxm from "@/data/category_gfxm";
 import Game, { GameHandle, QuestionResult } from "@/components/Game";
 import Footer from "@/components/Footer";
 import { useQuestionStore } from "@/stores/questionStore";
-import CelebrationEffect from "@/components/CelebrationEffect";
 
 export default function FolllowPageDetail({ params }: any) {
   const router = useRouter();
   const [questions, setQuestions]: any = useState([]);
   const [hasReult, setResult]: any = useState(false);
-  const [correctInfo, setCorrectInfo]: any = useState(false);
 
   let [quesNumber, setQuesNumber] = useState(0);
-  const [userSelectedQuizAns, setUserSelectedQuizAns]: any = useState([]);
   const [results, setResults] = useState<Record<number, QuestionResult>>({});
   const [showResults, setShowResults] = useState(false);
 
@@ -28,28 +23,6 @@ export default function FolllowPageDetail({ params }: any) {
   const { setCurrentQuestion } = useQuestionStore();
   const goBack = () => {
     router.push("/game");
-  };
-
-  const sanitizeHtml = (html: any) => {
-    return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        "b",
-        "i",
-        "u",
-        "em",
-        "strong",
-        "a",
-        "p",
-        "br",
-        "ul",
-        "ol",
-        "li",
-        "div",
-      ],
-      ALLOWED_ATTR: ["href", "title"],
-      FORBID_TAGS: ["script", "style", "iframe", "frame", "object", "embed"],
-      FORBID_ATTR: ["onclick", "onload", "onerror"],
-    });
   };
 
   const playAudio = () => {
@@ -74,15 +47,6 @@ export default function FolllowPageDetail({ params }: any) {
     setQuestions(ques);
     setCurrentQuestion(ques[0] || []);
   }, [params.slug]);
-
-  useEffect(() => {
-    const answers = questions[quesNumber]?.yueQuizAnswer;
-    if (answers && answers.length !== 0) {
-      if (answers.every((item: any) => userSelectedQuizAns.includes(item))) {
-        setCorrectInfo(true);
-      }
-    }
-  }, [userSelectedQuizAns]);
 
   const resultsColumns = [
     { title: "题目", dataIndex: "index", key: "index", width: 60 },
@@ -123,9 +87,6 @@ export default function FolllowPageDetail({ params }: any) {
           </div>
         </div>
       )}
-      {correctInfo && (
-        <CelebrationEffect type={"confetti"} message={"答对啦"} />
-      )}
       <button className="ml-5 mt-5" onClick={goBack}>
         {"<返回"}
       </button>
@@ -140,12 +101,7 @@ export default function FolllowPageDetail({ params }: any) {
               key={questions[quesNumber]?.key}
               className="text-item mt-4 py-4 px-3 border-3 rounded-2xl border-green-200 relative text-lg leading-12 font-bold"
             >
-              <div
-                className="game-quiz-warpper"
-                dangerouslySetInnerHTML={{
-                  __html: sanitizeHtml(questions[quesNumber]?.yueQuizText),
-                }}
-              ></div>
+              {questions[quesNumber]?.content}
               <div
                 className="audio-icon text-2xl z-1000 h-[24px]"
                 onClick={() => {
@@ -167,45 +123,6 @@ export default function FolllowPageDetail({ params }: any) {
                 type="audio/mpeg"
               ></source>
             </audio>
-
-            <div className="flex justify-center items-center mt-4">
-              {questions[quesNumber]?.yueQuiz ? (
-                questions[quesNumber]?.yueQuiz.map((quiz: any) => {
-                  return (
-                    <div
-                      onClick={() => {
-                        const answers = questions[quesNumber]?.yueQuizAnswer;
-                        const result = answers.find(
-                          (item: any) => item === quiz
-                        );
-                        if (result) {
-                          setUserSelectedQuizAns([
-                            ...userSelectedQuizAns,
-                            result,
-                          ]);
-                        } else {
-                          setCorrectInfo(false);
-                        }
-                      }}
-                      key={quiz}
-                      className={classNames(
-                        "text-center border-2 p-3 m-2 text-xl rounded-lg cursor-pointer",
-                        {
-                          "text-green-200 border-green-200":
-                            userSelectedQuizAns.includes(quiz),
-                          "text-gray-200 border-gray-200":
-                            !userSelectedQuizAns.includes(quiz),
-                        }
-                      )}
-                    >
-                      {quiz}
-                    </div>
-                  );
-                })
-              ) : (
-                <></>
-              )}
-            </div>
           </>
         </div>
         <Game

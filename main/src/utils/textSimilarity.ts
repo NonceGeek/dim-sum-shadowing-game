@@ -1,3 +1,8 @@
+// 这个函数是比较两个字符串的相似度，返回一个0-100的相似度
+import OpenCC from "opencc-js/t2cn";
+
+const toSimplified = OpenCC.Converter({ from: "t", to: "cn" });
+
 function levenshteinDistance(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
@@ -24,9 +29,9 @@ function levenshteinDistance(a: string, b: string): number {
   return prev[n];
 }
 
-/** 比较前完全忽略标点符号与空白，不参与相似度计算。 */
+/** 比较前去除标点与空白，并统一转为简体字。 */
 function normalizeForSimilarity(text: string): string {
-  return text.trim().replace(/[\p{P}\s]/gu, "");
+  return toSimplified(text.trim()).replace(/[\p{P}\s]/gu, "");
 }
 
 /** Returns 0–100 similarity based on normalized Levenshtein distance. */

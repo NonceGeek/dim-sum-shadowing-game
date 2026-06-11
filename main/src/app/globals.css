@@ -89,21 +89,6 @@ body {
   overflow-y: auto;
 }
 
-.game-quiz-warpper div:first-child {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.game-quiz-warpper > div > ul {
-  width: 24px;
-  height: 24px;
-  margin: 3px;
-  background-color: #8f959e;
-}
-
-
 @keyframes fall {
   0% {
     transform: translateY(0) rotate(0deg);
