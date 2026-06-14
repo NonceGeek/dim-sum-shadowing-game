@@ -1,11 +1,12 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { IoVolumeMediumSharp } from "react-icons/io5";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Game from "@/components/Game";
 import { useQuestionStore } from "@/stores/questionStore";
 import classNames from "classnames";
 import { fetchJyutpingContent } from "@/utils/jyutpingApi";
+import { buildFreeShadowingShareUrl } from "@/utils/customShadowing";
 
 interface Question {
   content?: string;
@@ -23,10 +24,12 @@ export default function FollowItemView({
   backHref?: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [quesNumber, setQuesNumber] = useState(0);
   const [isAudoSlowSpeed, setIsAudoSlowSpeed] = useState(false);
   const [hasResult, setResult] = useState(false);
   const [displayContent, setDisplayContent] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { setCurrentQuestion } = useQuestionStore();
 
@@ -77,6 +80,23 @@ export default function FollowItemView({
 
   const currentQ = questions[quesNumber];
 
+  const stParam = (searchParams.get("st") ?? searchParams.get("text"))?.trim() ?? "";
+  const audioParam = searchParams.get("audio")?.trim() ?? "";
+  const canShareLink = Boolean(stParam && audioParam);
+
+  const copyShareLink = async () => {
+    if (!canShareLink) return;
+    try {
+      await navigator.clipboard.writeText(
+        buildFreeShadowingShareUrl(stParam, audioParam),
+      );
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      alert("复制失败，请手动复制浏览器地址栏链接");
+    }
+  };
+
   return (
     <div className="">
       <button className="ml-5 mt-5" onClick={goBack}>
@@ -84,9 +104,20 @@ export default function FollowItemView({
       </button>
       <div className="wrapper px-4 py-4">
         <div className="text-content">
-          <div className="flex ml-3 mt-3">
-            <div>原文:&nbsp;</div>
-            <p>{currentQ?.originalText}</p>
+          <div className="ml-3 mt-3 flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-baseline">
+              <span className="shrink-0">原文:&nbsp;</span>
+              <p className="min-w-0">{currentQ?.originalText}</p>
+            </div>
+            {canShareLink && (
+              <button
+                type="button"
+                onClick={copyShareLink}
+                className="shrink-0 rounded-lg border border-green-200/60 px-3 py-1.5 text-sm text-green-200 transition hover:bg-green-200/10"
+              >
+                {shareCopied ? "已复制链接！" : "👉复制分享链接，让好友一同跟读！"}
+              </button>
+            )}
           </div>
           <div
             key={`${quesNumber}-${displayContent}`}

@@ -76,7 +76,7 @@ function FreeShadowingContent() {
     <div className="mx-8 mt-6 max-w-2xl">
       <h1 className="text-xl font-semibold text-green-200">自由跟读</h1>
       <p className="mt-3 text-sm leading-relaxed text-white/80">
-        在{" "}
+        1）在{" "}
         <a
           href="https://beta.search.aidimsum.com"
           target="_blank"
@@ -96,6 +96,16 @@ function FreeShadowingContent() {
         >
           AI DimSum 吴语语料库
         </a>{" "}
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-white/80">
+        2）点击{" "}
+        <a
+          href="/free_shadowing/free"
+          className="text-green-400 underline decoration-green-500/50 underline-offset-2 hover:text-green-300"
+        >
+          👉此链接👈
+        </a>
+        ，上传自己的音频和文本进行「超自由跟读」！
       </p>
       <img
         src="/copy_uuid.png"
