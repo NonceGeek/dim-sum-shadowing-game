@@ -210,14 +210,16 @@ function FreeShadowingFreeContent() {
           </label>
         )}
 
-        <button
-          type="button"
-          onClick={handleRecognizeText}
-          disabled={recognizing}
-          className="self-start rounded-lg border border-green-200/60 px-4 py-2 text-sm text-green-200 transition hover:bg-green-200/10 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {recognizing ? "识别中…" : "识别音频内容，自动填入跟读文本"}
-        </button>
+        {audioMode === "upload" && (
+          <button
+            type="button"
+            onClick={handleRecognizeText}
+            disabled={recognizing}
+            className="self-start rounded-lg border border-green-200/60 px-4 py-2 text-sm text-green-200 transition hover:bg-green-200/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {recognizing ? "识别中…" : "识别音频内容，自动填入跟读文本"}
+          </button>
+        )}
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
