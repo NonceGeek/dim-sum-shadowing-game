@@ -1,9 +1,28 @@
-import React from "react";
+"use client";
+import { useEffect, useState } from "react";
 import classNames from "classnames";
 
-const DEFAULT_AVATAR_SRC = "/default_avatar.png";
+const AVATAR_STORAGE_KEY = "shadowing_avatar";
+const AVATARS = Array.from({ length: 7 }, (_, i) => `/avatars/avatar_${i}.gif`);
+
+function pickRandomAvatar(): string {
+  return AVATARS[Math.floor(Math.random() * AVATARS.length)];
+}
 
 const UserProfile = ({ className }: { className?: string }) => {
+  const [avatarSrc, setAvatarSrc] = useState(AVATARS[0]);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem(AVATAR_STORAGE_KEY);
+    if (saved && AVATARS.includes(saved)) {
+      setAvatarSrc(saved);
+      return;
+    }
+    const picked = pickRandomAvatar();
+    sessionStorage.setItem(AVATAR_STORAGE_KEY, picked);
+    setAvatarSrc(picked);
+  }, []);
+
   return (
     <div
       className={classNames(
@@ -16,8 +35,8 @@ const UserProfile = ({ className }: { className?: string }) => {
         className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber-100 ring-2 ring-amber-300"
       >
         <img
-          src={DEFAULT_AVATAR_SRC}
-          alt="Default avatar"
+          src={avatarSrc}
+          alt="User avatar"
           className="h-full w-full object-cover"
         />
       </div>
