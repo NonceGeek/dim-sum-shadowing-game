@@ -50,7 +50,7 @@ const markdownComponents: Components = {
     );
   },
   img: ({ src, alt }) => {
-    if (!src) return null;
+    if (!src || typeof src !== "string") return null;
     const resolvedSrc = src.startsWith("./") ? `/${src.slice(2)}` : src;
     const isQr = alt === "my_qr" || resolvedSrc.includes("my_qr");
     return (
