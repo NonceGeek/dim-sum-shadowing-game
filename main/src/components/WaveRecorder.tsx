@@ -17,6 +17,28 @@ interface WaveRecorderProps {
   onReset: any;
 }
 
+const DEFAULT_FEEDBACK_ROWS: string[][] = [[
+  "读音仲有啲偏差，再试多次啦( ´ ▽ ` )ﾉ",
+  "已经唔错喇，再执一执会更好ヾ(◍°∇°◍)ﾉﾞ",
+  "发音几稳阵，继续保持😊",
+  "你读得好好，已经好接近完美😎",
+  "劲啊你！发音几乎零瑕疵😎",
+]];
+
+const parseFeedbackCsv = (text: string): string[][] => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+
+  return lines
+    .slice(1)
+    .map((line) => line.split(",").map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 5)
+    .map((cells) => cells.slice(0, 5));
+};
+
 export interface WaveRecorderHandle {
   reset: () => void;
 }
@@ -32,6 +54,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const [audioBlob, setAudioBlob] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [playTime, setPlayTime] = useState(0);
+  const [feedbackRows, setFeedbackRows] = useState<string[][]>([]);
   const { currentQuestion } = useQuestionStore();
   const { yueText } = currentQuestion || {};
 
@@ -54,6 +77,27 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   };
 
   const TRANSCRIBE_PROGRESS_MS = 15_000;
+
+  useEffect(() => {
+    let mounted = true;
+    const loadFeedbacks = async () => {
+      try {
+        const res = await fetch("/feedbacks.csv", { cache: "no-store" });
+        if (!res.ok) return;
+        const text = await res.text();
+        const rows = parseFeedbackCsv(text);
+        if (mounted && rows.length > 0) {
+          setFeedbackRows(rows);
+        }
+      } catch {
+        // Ignore CSV read errors and keep fallback feedbacks.
+      }
+    };
+    loadFeedbacks();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!transcribing) {
@@ -112,12 +156,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   }, [audioUrl]);
 
   const generateFeedback = (score: number): string => {
-    // 生成简单反馈
-    if (score > 0 && score < 41) return "注意发音差异，请再试一次( ´ ▽ ` )ﾉ";
-    if (score > 40 && score < 61) return "发音不错，但还有提升空间ヾ(◍°∇°◍)ﾉﾞ";
-    if (score > 60 && score < 81) return "发音良好，请继续保持😊";
-    if (score > 80 && score < 91) return "发音非常好，接近完美😎";
-    if (score > 90 && score < 101) return "太棒啦，发音完美无瑕😎";
+    let bucket = -1;
+    if (score > 0 && score < 41) bucket = 0;
+    else if (score > 40 && score < 61) bucket = 1;
+    else if (score > 60 && score < 81) bucket = 2;
+    else if (score > 80 && score < 91) bucket = 3;
+    else if (score > 90 && score < 101) bucket = 4;
+    if (bucket < 0) return "请重新录音";
+
+    const pool = feedbackRows.length > 0 ? feedbackRows : DEFAULT_FEEDBACK_ROWS;
+    const randomRow = pool[Math.floor(Math.random() * pool.length)];
+    const selected = randomRow?.[bucket];
+    if (selected) return selected;
     return "请重新录音";
   };
 

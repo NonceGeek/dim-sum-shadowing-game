@@ -1,5 +1,9 @@
 # 构建一个极简语言学习系统
 
+> 联系作者：
+>
+> ![my_qr](./my_qr.png)
+
 ## 1 语言学习元认知
 
 > **注：** 本文的很多内容参考自： [https://1000h.org/intro.html](https://1000h.org/intro.html)，特此感谢

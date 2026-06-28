@@ -49,15 +49,23 @@ const markdownComponents: Components = {
       </a>
     );
   },
-  img: ({ src, alt }) =>
-    src ? (
+  img: ({ src, alt }) => {
+    if (!src) return null;
+    const resolvedSrc = src.startsWith("./") ? `/${src.slice(2)}` : src;
+    const isQr = alt === "my_qr" || resolvedSrc.includes("my_qr");
+    return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={src}
+        src={resolvedSrc}
         alt={alt ?? ""}
-        className="my-4 w-full max-w-lg rounded-xl border border-white/10"
+        className={
+          isQr
+            ? "my-4 w-full max-w-[170px] rounded-xl border border-white/10"
+            : "my-4 w-full max-w-lg rounded-xl border border-white/10"
+        }
       />
-    ) : null,
+    );
+  },
 };
 
 export default function WhitepaperPage() {

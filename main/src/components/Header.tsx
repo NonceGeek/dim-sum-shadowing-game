@@ -19,6 +19,9 @@ export default function Header() {
           <Link href="/free_shadowing/free" className={navLinkClass}>
             超自由跟读
           </Link>
+          <Link href="/leaderboard" className={navLinkClass}>
+            🏆 排行榜
+          </Link>
           <Link href="/whitepaper" className={navLinkClass}>
             👉说明书👈
           </Link>
