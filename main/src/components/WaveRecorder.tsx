@@ -6,6 +6,8 @@ import { useQuestionStore } from "@/stores/questionStore";
 import { calculateTextSimilarity } from "@/utils/textSimilarity";
 import { IoPulseSharp } from "react-icons/io5";
 
+const LEADERBOARD_SUBMIT_URL =
+  "https://wcn3glqwz3m6.feishu.cn/share/base/form/shrcnxrws3HE37CfOWJgt9VaXqc";
 const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
 // 静音判定，终端两秒后没有声音则认为静音
 const SILENCE_THRESHOLD = 8;
@@ -508,6 +510,14 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
           >
             我要重新录制！
           </button>
+          <a
+            href={LEADERBOARD_SUBMIT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-1.5 rounded-full border border-white text-white text-sm hover:bg-white hover:text-neutral-800 transition-colors duration-200"
+          >
+            将「我的跟读」提交到排行榜&nbsp;😎
+          </a>
         </div>
       )}
     </>
