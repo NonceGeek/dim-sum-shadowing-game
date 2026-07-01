@@ -22,7 +22,7 @@
     name: "问路",
     questions: [
       {
-        content: "依(ji1)个(go3)地(zi2)址(dim2)点(haang4)",
+        content: "依(ji1)个(go3)地(dei6)址(zi2)点(dim2)行(hang4)",
         originalText: "这个地址怎么走？",
         yueText: "依个地址点行",
         audioUrl: "/audio/yue15.m4a",
