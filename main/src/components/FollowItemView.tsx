@@ -109,19 +109,19 @@ export default function FollowItemView({
               <span className="shrink-0">原文:&nbsp;</span>
               <p className="min-w-0">{currentQ?.originalText}</p>
             </div>
-            {canShareLink && (
+            {/* {canShareLink && (
               <button
                 type="button"
                 onClick={copyShareLink}
-                className="shrink-0 rounded-lg border border-green-200/60 px-3 py-1.5 text-sm text-green-200 transition hover:bg-green-200/10"
+                className="w-full shrink-0 whitespace-nowrap rounded-lg border border-green-200/60 px-3 py-1.5 text-sm text-green-200 transition hover:bg-green-200/10 sm:w-auto"
               >
-                {shareCopied ? "已复制链接！" : "👉复制分享链接，让好友一同跟读！"}
+                {shareCopied ? "已复制链接！" : "👉复制分享链接"}
               </button>
-            )}
+            )} */}
           </div>
           <div
             key={`${quesNumber}-${displayContent}`}
-            className="text-item mt-4 py-4 px-3 border-3 rounded-2xl border-green-200 relative text-lg leading-12 font-bold"
+            className="text-item relative mt-4 break-words rounded-2xl border-3 border-green-200 px-3 py-4 text-base font-bold leading-relaxed sm:text-lg sm:leading-12"
           >
             {displayContent}
             <div

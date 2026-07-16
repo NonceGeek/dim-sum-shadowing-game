@@ -6,8 +6,9 @@ import Header from "@/components/Header";
 import FollowItemView from "@/components/FollowItemView";
 import { buildCustomShadowingQuestion } from "@/utils/customShadowing";
 import { transcribeAudioBlob, transcribeAudioUrl } from "@/utils/transcribeApi";
+import { synthesizeCantoneseAudio, type TtsVoice } from "@/utils/ttsApi";
 
-type AudioMode = "upload" | "link";
+type AudioMode = "upload" | "link" | "tts";
 
 function readTextParam(searchParams: URLSearchParams): string {
   return (searchParams.get("st") ?? searchParams.get("text"))?.trim() ?? "";
@@ -28,11 +29,13 @@ function FreeShadowingFreeContent() {
   const [textInput, setTextInput] = useState(textParam);
   const [audioMode, setAudioMode] = useState<AudioMode>("upload");
   const [audioLinkInput, setAudioLinkInput] = useState(audioParam);
+  const [ttsVoice, setTtsVoice] = useState<TtsVoice>("Kiki");
   const [sessionQuestion, setSessionQuestion] = useState<ReturnType<
     typeof buildCustomShadowingQuestion
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recognizing, setRecognizing] = useState(false);
+  const [generatingTts, setGeneratingTts] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -62,10 +65,10 @@ function FreeShadowingFreeContent() {
       return;
     }
 
-    if (audioMode === "link") {
+    if (audioMode === "link" || audioMode === "tts") {
       const audioUrl = audioLinkInput.trim();
       if (!audioUrl) {
-        setError("请输入音频链接");
+        setError(audioMode === "tts" ? "请先生成 AI 声音文件" : "请输入音频链接");
         return;
       }
       router.push(buildFreeShadowingUrl(text, audioUrl));
@@ -121,6 +124,20 @@ function FreeShadowingFreeContent() {
     }
   };
 
+  const handleGenerateTts = async () => {
+    setError(null);
+    setGeneratingTts(true);
+    try {
+      const audioUrl = await synthesizeCantoneseAudio(textInput, ttsVoice);
+      setAudioLinkInput(audioUrl);
+    } catch (err) {
+      console.error("AI 生成音频失败:", err);
+      setError(err instanceof Error ? err.message : "AI 生成音频失败");
+    } finally {
+      setGeneratingTts(false);
+    }
+  };
+
   if (hasUrlParams) {
     if (question) {
       return (
@@ -147,10 +164,10 @@ function FreeShadowingFreeContent() {
     <div className="mx-8 mt-6 max-w-2xl">
       <h1 className="text-xl font-semibold text-green-200">超自由跟读</h1>
       <p className="mt-3 text-sm leading-relaxed text-white/80">
-        自行输入跟读文本，并上传音频或粘贴音频链接，即可开始跟读练习。
+        自行输入跟读文本，并上传音频、粘贴音频链接，或用 AI 生成粤语声音，即可开始跟读练习。
       </p>
       <p className="mt-2 text-sm leading-relaxed text-white/60">
-        使用音频链接提交后，可通过 URL 分享本页；上传本地文件仅在当前浏览器会话内有效。
+        使用音频链接或 AI 生成音频提交后，可通过 URL 分享本页；上传本地文件仅在当前浏览器会话内有效。AI 音频链接约 24 小时内有效。
       </p>
 
       <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
@@ -185,6 +202,15 @@ function FreeShadowingFreeContent() {
             />
             粘贴音频链接
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="audioMode"
+              checked={audioMode === "tts"}
+              onChange={() => setAudioMode("tts")}
+            />
+            AI 生成声音文件
+          </label>
         </fieldset>
 
         {audioMode === "upload" ? (
@@ -197,7 +223,7 @@ function FreeShadowingFreeContent() {
               className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm file:mr-3 file:rounded file:border-0 file:bg-green-100 file:px-3 file:py-1 file:text-sm file:text-green-900"
             />
           </label>
-        ) : (
+        ) : audioMode === "link" ? (
           <label className="flex flex-col gap-1.5 text-sm text-white/80">
             音频链接
             <input
@@ -208,6 +234,46 @@ function FreeShadowingFreeContent() {
               className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200"
             />
           </label>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5 text-sm text-white/80">
+              音色
+              <select
+                value={ttsVoice}
+                onChange={(e) => setTtsVoice(e.target.value as TtsVoice)}
+                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200"
+              >
+                <option value="Kiki">Kiki（粤语女声）</option>
+                <option value="Rocky">Rocky（粤语男声）</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleGenerateTts}
+              disabled={generatingTts || !textInput.trim()}
+              className="self-start rounded-lg border border-green-200/60 px-4 py-2 text-sm text-green-200 transition hover:bg-green-200/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generatingTts ? "生成中…" : "根据跟读文本生成声音"}
+            </button>
+            <label className="flex flex-col gap-1.5 text-sm text-white/80">
+              生成的音频链接
+              <input
+                type="url"
+                value={audioLinkInput}
+                onChange={(e) => setAudioLinkInput(e.target.value)}
+                placeholder="生成后会自动填入音频链接"
+                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm focus:border-green-400 focus:outline-none focus:ring-2 focus:ring-green-200"
+              />
+            </label>
+            {audioLinkInput.trim() && (
+              <audio
+                controls
+                preload="none"
+                src={audioLinkInput.trim()}
+                className="w-full max-w-md"
+              />
+            )}
+          </div>
         )}
 
         {audioMode === "upload" && (

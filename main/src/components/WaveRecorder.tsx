@@ -434,9 +434,9 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
   return (
     <>
-      <div className="flex items-center">
+      <div className="flex min-w-0 items-center gap-1">
         {/* 录音控制面板 */}
-        <div className="flex flex-col">
+        <div className="flex shrink-0 flex-col">
           <div className="flex space-x-4">
             <Tooltip
               title={
@@ -469,7 +469,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         </div>
 
         {/* 波形显示区域 */}
-        <div className="min-w-4/5">
+        <div className="min-w-0 flex-1">
           <div
             onClick={togglePlayback}
             ref={waveformRef}
@@ -491,22 +491,23 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       )}
       {/* 音频识别结果 */}
       {transcript && (
-        <p className="mt-2 text-base text-white text-center">
+        <p className="mt-2 break-words px-1 text-center text-sm text-white sm:text-base">
           录音识别结果：<b>{transcript}</b>
         </p>
       )}
       {audioUrl && (
-        <div className="mt-3 flex justify-center gap-3">
+        <div className="mt-3 flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:flex-wrap sm:justify-center sm:items-center sm:gap-3 sm:px-0">
           <a
             href={audioUrl}
             download="recording.wav"
-            className="px-4 py-1.5 rounded-full border border-white text-white text-sm hover:bg-white hover:text-neutral-800 transition-colors duration-200"
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
           >
-            下载录音（该功能建议在电脑端使用~）
+            <span className="sm:hidden">下载录音</span>
+            <span className="hidden sm:inline">下载录音（该功能建议在电脑端使用~）</span>
           </a>
           <button
             onClick={resetState}
-            className="px-4 py-1.5 rounded-full border border-white text-white text-sm hover:bg-white hover:text-neutral-800 transition-colors duration-200"
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
           >
             我要重新录制！
           </button>
@@ -514,9 +515,10 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
             href={LEADERBOARD_SUBMIT_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-1.5 rounded-full border border-white text-white text-sm hover:bg-white hover:text-neutral-800 transition-colors duration-200"
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
           >
-            将「我的跟读」提交到排行榜&nbsp;😎
+            <span className="sm:hidden">提交到排行榜 😎</span>
+            <span className="hidden sm:inline">将「我的跟读」提交到排行榜&nbsp;😎</span>
           </a>
         </div>
       )}

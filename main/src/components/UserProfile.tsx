@@ -40,7 +40,9 @@ const UserProfile = ({ className }: { className?: string }) => {
           className="h-full w-full object-cover"
         />
       </div>
-      <div className="ml-3">你好，探险家❤️! </div>
+      <div className="ml-3 whitespace-nowrap text-sm sm:text-base">
+        你好，探险家❤️!
+      </div>
     </div>
   );
 };

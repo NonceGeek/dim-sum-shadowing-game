@@ -60,7 +60,7 @@ const Game = forwardRef<
   useImperativeHandle(ref, () => ({ reset: resetAll }));
 
   return (
-    <main className="container mx-auto py-8 max-w-4xl">
+    <main className="container mx-auto max-w-4xl px-1 py-4 sm:px-0 sm:py-8">
       {score > 70 && (
         <CelebrationEffect type={"confetti"} message={"发音很棒"} />
       )}

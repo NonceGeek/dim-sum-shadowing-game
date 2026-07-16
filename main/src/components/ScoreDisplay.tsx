@@ -7,9 +7,13 @@ interface ScoreDisplayProps {
 
 const ScoreDisplay = ({ score, feedback }: ScoreDisplayProps) => {
   return (
-    <div className="text-center pt-12 pb-4">
-      <div className="text-4xl font-bold rounded-2xl border-3 border-green-200 w-22 text-center py-3 mx-auto my-0">{score}</div>
-      <p className="mt-3 text-green-200">{feedback}</p>
+    <div className="px-2 pb-4 pt-8 text-center sm:pt-12">
+      <div className="mx-auto my-0 w-22 rounded-2xl border-3 border-green-200 py-3 text-center text-4xl font-bold">
+        {score}
+      </div>
+      <p className="mt-3 break-words px-2 text-sm text-green-200 sm:text-base">
+        {feedback}
+      </p>
     </div>
   );
 };

@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "跟住读",
   description: "听一句，学一句，超有效！",
+  icons: {
+    icon: "/logos/logo.ico",
+  },
 };
 
 export default function RootLayout({
