@@ -53,6 +53,32 @@ function triggerAudioDownload(url: string, filename: string) {
   anchor.remove();
 }
 
+function waitForAudioReady(audio: HTMLAudioElement): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      resolve();
+      return;
+    }
+
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("音频加载失败"));
+    };
+    const cleanup = () => {
+      audio.removeEventListener("canplay", onReady);
+      audio.removeEventListener("error", onError);
+    };
+
+    audio.addEventListener("canplay", onReady);
+    audio.addEventListener("error", onError);
+    audio.load();
+  });
+}
+
 
 interface WaveRecorderProps {
   onRecordingComplete: (score: number, feedback: string, transcript: string, yueText: string) => void;
@@ -119,6 +145,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const wavBlobRef = useRef<Blob | null>(null);
   const recordingBlobRef = useRef<Blob | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackUrlRef = useRef("");
   const recordingStartedAtRef = useRef(0);
   const playAfterRecordingRef = useRef(false);
 
@@ -175,14 +202,12 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     return () => clearInterval(interval);
   }, [transcribing]);
 
-  // 初始化 wavesurfer（绑定同一 audio 元素，仅作波形展示，避免双路播放）
+  // 初始化 wavesurfer（仅波形展示；实际出声走独立 audio 元素）
   useEffect(() => {
-    const audio = playbackAudioRef.current;
-    if (!WaveSurfer || !waveformRef.current || !audio) return;
+    if (!WaveSurfer || !waveformRef.current) return;
 
     const ws = WaveSurfer.create({
       container: waveformRef.current,
-      media: audio,
       waveColor: "#8ee085",
       progressColor: "#8b5cf6",
       cursorColor: "#333",
@@ -203,12 +228,37 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     };
   }, []);
 
+  // 播放进度与波形同步
   useEffect(() => {
     const audio = playbackAudioRef.current;
-    if (!audio || !audioUrl || !wavesurferRef.current) return;
+    if (!audio) return;
 
+    const syncProgress = () => {
+      const ws = wavesurferRef.current;
+      if (!ws || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+      ws.seekTo(audio.currentTime / audio.duration);
+    };
+
+    const resetProgress = () => {
+      wavesurferRef.current?.seekTo(0);
+    };
+
+    audio.addEventListener("timeupdate", syncProgress);
+    audio.addEventListener("ended", resetProgress);
+    return () => {
+      audio.removeEventListener("timeupdate", syncProgress);
+      audio.removeEventListener("ended", resetProgress);
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = playbackAudioRef.current;
+    if (!audio || !audioUrl) return;
+
+    playbackUrlRef.current = audioUrl;
+    audio.pause();
     audio.src = audioUrl;
-    void wavesurferRef.current.load(audioUrl);
+    audio.load();
 
     if (!playAfterRecordingRef.current) return;
     playAfterRecordingRef.current = false;
@@ -217,12 +267,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       void startPlayback();
     };
 
-    if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+    if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
       startDeferredPlayback();
     } else {
       audio.addEventListener("canplay", startDeferredPlayback, { once: true });
     }
   }, [audioUrl]);
+
+  // 判定结束后再加载波形，避免与手机端播放争抢解码资源
+  useEffect(() => {
+    if (!audioUrl || !wavesurferRef.current || transcribing) return;
+    void wavesurferRef.current.load(audioUrl);
+  }, [audioUrl, transcribing]);
 
   const generateFeedback = (score: number): string => {
     let bucket = -1;
@@ -401,6 +457,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     wavBlobRef.current = null;
     recordingBlobRef.current = null;
     playAfterRecordingRef.current = false;
+    playbackUrlRef.current = "";
     playbackAudioRef.current?.pause();
     onReset?.();
   };
@@ -552,19 +609,28 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     await beginRecording();
   };
 
-  // 点击播放录音，播完自动停止；播放中再次点击则从头重播（仅驱动原生 audio）
+  // 点击播放录音，播完自动停止；播放中再次点击则从头重播
   const startPlayback = async () => {
     const audio = playbackAudioRef.current;
     if (!audio || !audioUrl) return;
 
     if (!audio.paused) {
       audio.currentTime = 0;
+      wavesurferRef.current?.seekTo(0);
       return;
     }
 
     try {
       if (audio.ended) audio.currentTime = 0;
+
+      if (playbackUrlRef.current !== audioUrl || !audio.src) {
+        playbackUrlRef.current = audioUrl;
+        audio.src = audioUrl;
+      }
+
+      await waitForAudioReady(audio);
       await audio.play();
+      wavesurferRef.current?.seekTo(0);
     } catch (err) {
       console.error("播放失败:", err);
     }
