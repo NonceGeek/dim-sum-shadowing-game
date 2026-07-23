@@ -554,16 +554,24 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     await beginRecording();
   };
 
-  // 点击播放录音，播完自动停止（不支持暂停）
+  // 点击播放录音，播完自动停止；播放中再次点击则从头重播
   const startPlayback = async () => {
     const audio = playbackAudioRef.current;
     if (audio) {
-      if (!audio.paused) return;
+      if (!audio.paused) {
+        audio.currentTime = 0;
+        if (!transcribing) {
+          wavesurferRef.current?.seekTo(0);
+          wavesurferRef.current?.play().catch(() => {});
+        }
+        return;
+      }
 
       try {
         if (audio.ended) audio.currentTime = 0;
         await audio.play();
         if (!transcribing) {
+          wavesurferRef.current?.seekTo(0);
           wavesurferRef.current?.play().catch(() => {});
         }
       } catch (err) {
@@ -572,7 +580,11 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       return;
     }
 
-    if (!wavesurferRef.current || wavesurferRef.current.isPlaying()) return;
+    if (!wavesurferRef.current) return;
+    if (wavesurferRef.current.isPlaying()) {
+      wavesurferRef.current.seekTo(0);
+      return;
+    }
     wavesurferRef.current.play();
   };
 
