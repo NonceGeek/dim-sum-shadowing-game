@@ -146,6 +146,11 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const recordingBlobRef = useRef<Blob | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const playbackUrlRef = useRef("");
+  const transcribingRef = useRef(false);
+  const webAudioPlaybackRef = useRef<{
+    ctx: AudioContext;
+    source: AudioBufferSourceNode;
+  } | null>(null);
   const recordingStartedAtRef = useRef(0);
   const playAfterRecordingRef = useRef(false);
 
@@ -234,6 +239,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     if (!audio) return;
 
     const syncProgress = () => {
+      if (transcribingRef.current) return;
       const ws = wavesurferRef.current;
       if (!ws || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
       ws.seekTo(audio.currentTime / audio.duration);
@@ -345,10 +351,50 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     return new Blob([wavBuffer], { type: "audio/wav" });
   };
 
+  const stopWebAudioPlayback = () => {
+    const playback = webAudioPlaybackRef.current;
+    if (!playback) return;
+    try {
+      playback.source.stop();
+    } catch {
+      // already stopped
+    }
+    void playback.ctx.close().catch(() => {});
+    webAudioPlaybackRef.current = null;
+  };
+
+  const playBlobViaWebAudio = async (blob: Blob) => {
+    stopWebAudioPlayback();
+    playbackAudioRef.current?.pause();
+
+    const ctx = new AudioContext();
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+
+    const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+    webAudioPlaybackRef.current = { ctx, source };
+    source.onended = () => {
+      if (webAudioPlaybackRef.current?.source === source) {
+        stopWebAudioPlayback();
+      }
+      wavesurferRef.current?.seekTo(0);
+    };
+  };
+
   // 调用 /api/transcribe 转录粤语音频
   const transcribeAudio = async (blob: Blob) => {
+    transcribingRef.current = true;
     setTranscribing(true);
     recordingBlobRef.current = blob;
+
+    // 给手机端一点时间释放麦克风音频会话，避免与回放冲突
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
     try {
       const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
       const file = new File([blob], `recording.${ext}`, {
@@ -381,6 +427,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       console.error("转录失败:", err);
       onRecordingComplete(0, "系统错误", "", yueText ?? "");
     } finally {
+      transcribingRef.current = false;
       setTranscribing(false);
       clearInterval(timerRef.current);
       cancelAnimationFrame(animationRef.current);
@@ -458,6 +505,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     recordingBlobRef.current = null;
     playAfterRecordingRef.current = false;
     playbackUrlRef.current = "";
+    stopWebAudioPlayback();
     playbackAudioRef.current?.pause();
     onReset?.();
   };
@@ -507,7 +555,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         setRecordedAt(new Date());
         setAudioBlob(blob as any);
 
-        await transcribeAudio(blob);
+        void transcribeAudio(blob);
       };
 
       mediaRecorderRef.current.start(RECORDER_TIMESLICE_MS);
@@ -611,8 +659,26 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
   // 点击播放录音，播完自动停止；播放中再次点击则从头重播
   const startPlayback = async () => {
+    const blob = recordingBlobRef.current;
+
+    // 判定中：走 Web Audio，绕开 iOS 隐藏 audio 元素无声播放的问题
+    if (transcribingRef.current && blob) {
+      if (webAudioPlaybackRef.current) {
+        await playBlobViaWebAudio(blob);
+        return;
+      }
+      try {
+        await playBlobViaWebAudio(blob);
+      } catch (err) {
+        console.error("播放失败:", err);
+      }
+      return;
+    }
+
     const audio = playbackAudioRef.current;
     if (!audio || !audioUrl) return;
+
+    stopWebAudioPlayback();
 
     if (!audio.paused) {
       audio.currentTime = 0;
@@ -628,6 +694,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         audio.src = audioUrl;
       }
 
+      audio.muted = false;
+      audio.volume = 1;
       await waitForAudioReady(audio);
       await audio.play();
       wavesurferRef.current?.seekTo(0);
@@ -703,7 +771,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
   return (
     <>
-      <audio ref={playbackAudioRef} className="hidden" preload="auto" playsInline />
+      <audio
+        ref={playbackAudioRef}
+        preload="auto"
+        playsInline
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
       {countdownDisplay && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -760,13 +839,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         </div>
 
         {/* 波形显示区域 */}
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <div
-            onClick={playRecording}
             ref={waveformRef}
-            className="border border-indigo-500/30 rounded-xl p-2 min-h-[10px]"
+            className="pointer-events-none border border-indigo-500/30 rounded-xl p-2 min-h-[10px]"
             style={{ backgroundColor: recording ? "#fff" : "#ceffce" }}
-          ></div>
+          />
+          <button
+            type="button"
+            aria-label="播放录音"
+            onClick={playRecording}
+            className="absolute inset-0 rounded-xl"
+          />
         </div>
       </div>
       {transcribing && (
