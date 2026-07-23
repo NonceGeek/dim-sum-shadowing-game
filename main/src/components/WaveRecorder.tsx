@@ -95,6 +95,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const [countdownDisplay, setCountdownDisplay] = useState<string | null>(null);
   const [recordHintOpen, setRecordHintOpen] = useState(false);
   const [recordedAt, setRecordedAt] = useState<Date | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const { currentQuestion } = useQuestionStore();
   const { yueText, originalText } = currentQuestion || {};
 
@@ -114,6 +115,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const countdownTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const countingDownRef = useRef(false);
   const wavBlobRef = useRef<Blob | null>(null);
+  const recordingBlobRef = useRef<Blob | null>(null);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const COUNTDOWN_STEPS = ["3", "2", "1", "开始！"] as const;
   const COUNTDOWN_TICK_MS = 650;
@@ -207,6 +210,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     };
   }, [audioUrl]);
 
+  useEffect(() => {
+    const audio = playbackAudioRef.current;
+    if (!audio || !audioUrl) return;
+
+    audio.src = audioUrl;
+    audio.load();
+
+    const handleEnded = () => setPlaying(false);
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, [audioUrl]);
+
   const generateFeedback = (score: number): string => {
     let bucket = -1;
     if (score > 0 && score < 41) bucket = 0;
@@ -272,14 +287,15 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     return new Blob([wavBuffer], { type: "audio/wav" });
   };
 
-  // 调用 /api/trans_cantonese 转录粤语音频
+  // 调用 /api/transcribe 转录粤语音频
   const transcribeAudio = async (blob: Blob) => {
     setTranscribing(true);
+    recordingBlobRef.current = blob;
     try {
-      // OpenAI 通过 OpenRouter 只支持 wav / mp3，先转换
-      const wavBlob = await convertToWav(blob);
-      wavBlobRef.current = wavBlob;
-      const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
+      const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+      const file = new File([blob], `recording.${ext}`, {
+        type: blob.type || "audio/webm",
+      });
       const formData = new FormData();
       formData.append("file", file);
       formData.append("language", "yue");
@@ -376,7 +392,10 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     setDuration(0);
     setAudioBlob(null);
     setRecordedAt(null);
+    setDownloading(false);
     wavBlobRef.current = null;
+    recordingBlobRef.current = null;
+    playbackAudioRef.current?.pause();
     onReset?.();
   };
 
@@ -510,16 +529,38 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     await beginRecording();
   };
 
-  // 播放/暂停录音
-  const togglePlayback = () => {
-    if (!audioUrl || !wavesurferRef.current) return;
+  // 播放/暂停录音（优先用原生 audio，手机端更稳定）
+  const togglePlayback = async () => {
+    if (!audioUrl) return;
 
+    const audio = playbackAudioRef.current;
+    if (audio) {
+      if (!audio.paused) {
+        audio.pause();
+        wavesurferRef.current?.pause();
+        setPlaying(false);
+        return;
+      }
+
+      try {
+        if (audio.ended) audio.currentTime = 0;
+        await audio.play();
+        if (!transcribing) {
+          wavesurferRef.current?.play().catch(() => {});
+        }
+        setPlaying(true);
+        return;
+      } catch (err) {
+        console.error("播放失败:", err);
+      }
+    }
+
+    if (!wavesurferRef.current) return;
     if (playing) {
       wavesurferRef.current.pause();
     } else {
       wavesurferRef.current.play();
     }
-
     setPlaying(!playing);
   };
 
@@ -527,9 +568,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     recordedAt &&
     buildRecordingDownloadName(originalText?.trim() || yueText?.trim() || "录音", recordedAt);
 
-  const handleDownload = (nickname?: string) => {
-    const wavBlob = wavBlobRef.current;
-    if (!wavBlob || !recordedAt || transcribing) return;
+  const handleDownload = async (nickname?: string) => {
+    if (!recordedAt || transcribing || downloading) return;
 
     let filename: string;
     if (nickname !== undefined) {
@@ -551,19 +591,37 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         );
     }
 
+    let wavBlob = wavBlobRef.current;
+    if (!wavBlob) {
+      const source = recordingBlobRef.current;
+      if (!source) return;
+      setDownloading(true);
+      try {
+        wavBlob = await convertToWav(source);
+        wavBlobRef.current = wavBlob;
+      } catch (err) {
+        console.error("WAV 转换失败:", err);
+        alert("音频处理失败，请稍后再试");
+        return;
+      } finally {
+        setDownloading(false);
+      }
+    }
+
     const url = URL.createObjectURL(wavBlob);
     triggerAudioDownload(url, filename);
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const handleDownloadWithNickname = () => {
+  const handleDownloadWithNickname = async () => {
     const nickname = window.prompt("请输入你的昵称");
     if (nickname === null) return;
-    handleDownload(nickname);
+    await handleDownload(nickname);
   };
 
   return (
     <>
+      <audio ref={playbackAudioRef} className="hidden" preload="auto" playsInline />
       {countdownDisplay && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -650,17 +708,19 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         <div className="mt-3 flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:flex-wrap sm:justify-center sm:items-center sm:gap-3 sm:px-0">
           <button
             type="button"
-            onClick={() => handleDownload()}
-            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
+            onClick={() => void handleDownload()}
+            disabled={downloading}
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5"
           >
-            下载录音
+            {downloading ? "处理中…" : "下载录音"}
           </button>
           <button
             type="button"
-            onClick={handleDownloadWithNickname}
-            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
+            onClick={() => void handleDownloadWithNickname()}
+            disabled={downloading}
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5"
           >
-            带昵称下载录音
+            {downloading ? "处理中…" : "带昵称下载录音"}
           </button>
           <button
             onClick={resetState}
