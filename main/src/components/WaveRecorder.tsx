@@ -9,9 +9,14 @@ import { IoPulseSharp } from "react-icons/io5";
 const LEADERBOARD_SUBMIT_URL =
   "https://wcn3glqwz3m6.feishu.cn/share/base/form/shrcnxrws3HE37CfOWJgt9VaXqc";
 const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
-// 静音判定，终端两秒后没有声音则认为静音
-const SILENCE_THRESHOLD = 8;
-const SILENCE_DURATION_MS = 2000;
+// 静音判定：手机麦克风增益较低，阈值与等待时间略放宽
+const isMobileDevice = () =>
+  typeof navigator !== "undefined" &&
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const SILENCE_THRESHOLD = isMobileDevice() ? 4 : 8;
+const SILENCE_DURATION_MS = isMobileDevice() ? 3000 : 2000;
+const MIN_RECORDING_MS = 1200;
+const RECORDER_TIMESLICE_MS = 250;
 
 function formatRecordingTimestamp(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -89,8 +94,6 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const [audioUrl, setAudioUrl] = useState("");
   const [duration, setDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState(null);
-  const [playing, setPlaying] = useState(false);
-  const [playTime, setPlayTime] = useState(0);
   const [feedbackRows, setFeedbackRows] = useState<string[][]>([]);
   const [countdownDisplay, setCountdownDisplay] = useState<string | null>(null);
   const [recordHintOpen, setRecordHintOpen] = useState(false);
@@ -104,7 +107,6 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const waveformRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
   const animationRef = useRef<any>(null);
-  const playProgressRef = useRef<any>(null);
   const recordingRef = useRef(false);
   const lastSoundAtRef = useRef(0);
   const hasSpeechRef = useRef(false);
@@ -117,6 +119,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const wavBlobRef = useRef<Blob | null>(null);
   const recordingBlobRef = useRef<Blob | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const recordingStartedAtRef = useRef(0);
+  const playAfterRecordingRef = useRef(false);
 
   const COUNTDOWN_STEPS = ["3", "2", "1", "开始！"] as const;
   const COUNTDOWN_TICK_MS = 650;
@@ -187,14 +191,6 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         interact: false,
       });
 
-      wavesurferRef.current.on("audioprocess", (time: any) => {
-        setPlayTime(Math.floor(time));
-      });
-
-      wavesurferRef.current.on("finish", () => {
-        setPlaying(false);
-      });
-
       if (audioUrl) {
         wavesurferRef.current.load(audioUrl);
       }
@@ -206,7 +202,6 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       }
       clearInterval(timerRef.current);
       cancelAnimationFrame(animationRef.current);
-      clearInterval(playProgressRef.current);
     };
   }, [audioUrl]);
 
@@ -217,9 +212,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     audio.src = audioUrl;
     audio.load();
 
-    const handleEnded = () => setPlaying(false);
-    audio.addEventListener("ended", handleEnded);
-    return () => audio.removeEventListener("ended", handleEnded);
+    if (!playAfterRecordingRef.current) return;
+    playAfterRecordingRef.current = false;
+
+    const startDeferredPlayback = () => {
+      void startPlayback();
+    };
+
+    if (audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+      startDeferredPlayback();
+    } else {
+      audio.addEventListener("canplay", startDeferredPlayback, { once: true });
+    }
   }, [audioUrl]);
 
   const generateFeedback = (score: number): string => {
@@ -357,7 +361,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     return true;
   };
 
-  // 停止录音（静音超时或内部调用）
+  // 停止录音（静音超时、手动点击或内部调用）
   const stopRecording = () => {
     if (!mediaRecorderRef.current || !recordingRef.current) return;
 
@@ -365,15 +369,19 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     setRecording(false);
     cancelAnimationFrame(animationRef.current);
     clearInterval(timerRef.current);
-    audioContextRef.current?.close().catch(() => {});
-    audioContextRef.current = null;
 
     if (waveformRef.current) {
       waveformRef.current.style.boxShadow = "";
     }
 
-    if (mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder.state === "recording") {
+      try {
+        recorder.requestData();
+      } catch {
+        // requestData 在部分浏览器上不可用，忽略即可
+      }
+      recorder.stop();
     }
   };
 
@@ -388,13 +396,13 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       return "";
     });
     setTranscript("");
-    setPlaying(false);
     setDuration(0);
     setAudioBlob(null);
     setRecordedAt(null);
     setDownloading(false);
     wavBlobRef.current = null;
     recordingBlobRef.current = null;
+    playAfterRecordingRef.current = false;
     playbackAudioRef.current?.pause();
     onReset?.();
   };
@@ -404,7 +412,13 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   // 开始录音（倒计时结束后调用）
   const beginRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       const audioChunks: Blob[] = [];
       const mimeType = pickRecorderMimeType();
@@ -419,11 +433,14 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       };
 
       mediaRecorderRef.current.onstop = async () => {
+        audioContextRef.current?.close().catch(() => {});
+        audioContextRef.current = null;
         stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
 
         if (skipTranscribeRef.current) {
           skipTranscribeRef.current = false;
+          playAfterRecordingRef.current = false;
           return;
         }
 
@@ -438,8 +455,9 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         await transcribeAudio(blob);
       };
 
-      mediaRecorderRef.current.start();
+      mediaRecorderRef.current.start(RECORDER_TIMESLICE_MS);
       recordingRef.current = true;
+      recordingStartedAtRef.current = Date.now();
       setRecording(true);
       lastSoundAtRef.current = Date.now();
       hasSpeechRef.current = false;
@@ -482,6 +500,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
           lastSoundAtRef.current = now;
         } else if (
           hasSpeechRef.current &&
+          now - recordingStartedAtRef.current >= MIN_RECORDING_MS &&
           now - lastSoundAtRef.current >= SILENCE_DURATION_MS
         ) {
           stopRecording();
@@ -517,7 +536,13 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   };
 
   const startRecording = async () => {
-    if (recordingRef.current || transcribing || countingDownRef.current) return;
+    if (transcribing || countingDownRef.current) return;
+
+    // 录音中再次点击 = 手动停止
+    if (recordingRef.current) {
+      stopRecording();
+      return;
+    }
 
     // 评分完成后再次点击录制，先重置上一轮结果（含分数模块）
     resetState();
@@ -529,18 +554,11 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     await beginRecording();
   };
 
-  // 播放/暂停录音（优先用原生 audio，手机端更稳定）
-  const togglePlayback = async () => {
-    if (!audioUrl) return;
-
+  // 点击播放录音，播完自动停止（不支持暂停）
+  const startPlayback = async () => {
     const audio = playbackAudioRef.current;
     if (audio) {
-      if (!audio.paused) {
-        audio.pause();
-        wavesurferRef.current?.pause();
-        setPlaying(false);
-        return;
-      }
+      if (!audio.paused) return;
 
       try {
         if (audio.ended) audio.currentTime = 0;
@@ -548,20 +566,24 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         if (!transcribing) {
           wavesurferRef.current?.play().catch(() => {});
         }
-        setPlaying(true);
-        return;
       } catch (err) {
         console.error("播放失败:", err);
       }
+      return;
     }
 
-    if (!wavesurferRef.current) return;
-    if (playing) {
-      wavesurferRef.current.pause();
-    } else {
-      wavesurferRef.current.play();
+    if (!wavesurferRef.current || wavesurferRef.current.isPlaying()) return;
+    wavesurferRef.current.play();
+  };
+
+  const playRecording = () => {
+    if (recordingRef.current) {
+      playAfterRecordingRef.current = true;
+      stopRecording();
+      return;
     }
-    setPlaying(!playing);
+    if (!audioUrl) return;
+    void startPlayback();
   };
 
   const downloadFileName =
@@ -647,7 +669,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
                   : countdownDisplay
                     ? "准备录制…"
                     : recording
-                      ? "录音中，停止后将自动识别"
+                      ? "点击停止录音"
                       : "点击录制"
               }
               color={"lime"}
@@ -658,7 +680,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
             >
               <button
                 onClick={startRecording}
-                disabled={recording || transcribing || Boolean(countdownDisplay)}
+                disabled={transcribing || Boolean(countdownDisplay)}
                 className={`px-3 py-2 rounded-full font-bold text-lg duration-300 disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {recording ? (
@@ -680,7 +702,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         {/* 波形显示区域 */}
         <div className="min-w-0 flex-1">
           <div
-            onClick={togglePlayback}
+            onClick={playRecording}
             ref={waveformRef}
             className="border border-indigo-500/30 rounded-xl p-2 min-h-[10px]"
             style={{ backgroundColor: recording ? "#fff" : "#ceffce" }}
