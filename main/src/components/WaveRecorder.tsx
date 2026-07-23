@@ -113,6 +113,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const countdownAbortedRef = useRef(false);
   const countdownTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const countingDownRef = useRef(false);
+  const wavBlobRef = useRef<Blob | null>(null);
 
   const COUNTDOWN_STEPS = ["3", "2", "1", "开始！"] as const;
   const COUNTDOWN_TICK_MS = 650;
@@ -277,6 +278,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     try {
       // OpenAI 通过 OpenRouter 只支持 wav / mp3，先转换
       const wavBlob = await convertToWav(blob);
+      wavBlobRef.current = wavBlob;
       const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
       const formData = new FormData();
       formData.append("file", file);
@@ -374,6 +376,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     setDuration(0);
     setAudioBlob(null);
     setRecordedAt(null);
+    wavBlobRef.current = null;
     onReset?.();
   };
 
@@ -524,20 +527,39 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     recordedAt &&
     buildRecordingDownloadName(originalText?.trim() || yueText?.trim() || "录音", recordedAt);
 
+  const handleDownload = (nickname?: string) => {
+    const wavBlob = wavBlobRef.current;
+    if (!wavBlob || !recordedAt || transcribing) return;
+
+    let filename: string;
+    if (nickname !== undefined) {
+      if (!nickname.trim()) {
+        alert("昵称不能为空");
+        return;
+      }
+      filename = buildRecordingDownloadName(
+        originalText?.trim() || yueText?.trim() || "录音",
+        recordedAt,
+        nickname,
+      );
+    } else {
+      filename =
+        downloadFileName ||
+        buildRecordingDownloadName(
+          originalText?.trim() || yueText?.trim() || "录音",
+          recordedAt,
+        );
+    }
+
+    const url = URL.createObjectURL(wavBlob);
+    triggerAudioDownload(url, filename);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleDownloadWithNickname = () => {
-    if (!audioUrl || !recordedAt) return;
     const nickname = window.prompt("请输入你的昵称");
     if (nickname === null) return;
-    if (!nickname.trim()) {
-      alert("昵称不能为空");
-      return;
-    }
-    const filename = buildRecordingDownloadName(
-      originalText?.trim() || yueText?.trim() || "录音",
-      recordedAt,
-      nickname,
-    );
-    triggerAudioDownload(audioUrl, filename);
+    handleDownload(nickname);
   };
 
   return (
@@ -624,15 +646,15 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
           录音识别结果：<b>{transcript}</b>
         </p>
       )}
-      {audioUrl && (
+      {audioUrl && !transcribing && (
         <div className="mt-3 flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:flex-wrap sm:justify-center sm:items-center sm:gap-3 sm:px-0">
-          <a
-            href={audioUrl}
-            download={downloadFileName || "recording.wav"}
+          <button
+            type="button"
+            onClick={() => handleDownload()}
             className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
           >
             下载录音
-          </a>
+          </button>
           <button
             type="button"
             onClick={handleDownloadWithNickname}
@@ -642,7 +664,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
           </button>
           <button
             onClick={resetState}
-            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
+            disabled={transcribing}
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5"
           >
             我要重新录制！
           </button>
