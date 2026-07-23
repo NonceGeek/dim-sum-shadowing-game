@@ -13,6 +13,41 @@ const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
 const SILENCE_THRESHOLD = 8;
 const SILENCE_DURATION_MS = 2000;
 
+function formatRecordingTimestamp(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function sanitizeFilenamePart(text: string, maxLen = 50): string {
+  return text
+    .trim()
+    .replace(/[/\\:*?"<>|\n\r]/g, "")
+    .replace(/\s+/g, "")
+    .slice(0, maxLen);
+}
+
+function buildRecordingDownloadName(
+  originalText: string,
+  recordedAt: Date,
+  nickname?: string,
+): string {
+  const textPart = sanitizeFilenamePart(originalText) || "录音";
+  const ts = formatRecordingTimestamp(recordedAt);
+  const nickPart = nickname ? sanitizeFilenamePart(nickname, 30) : "";
+  if (nickPart) return `${nickPart}_${textPart}_${ts}.wav`;
+  return `${textPart}_${ts}.wav`;
+}
+
+function triggerAudioDownload(url: string, filename: string) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 
 interface WaveRecorderProps {
   onRecordingComplete: (score: number, feedback: string, transcript: string, yueText: string) => void;
@@ -59,8 +94,9 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const [feedbackRows, setFeedbackRows] = useState<string[][]>([]);
   const [countdownDisplay, setCountdownDisplay] = useState<string | null>(null);
   const [recordHintOpen, setRecordHintOpen] = useState(false);
+  const [recordedAt, setRecordedAt] = useState<Date | null>(null);
   const { currentQuestion } = useQuestionStore();
-  const { yueText } = currentQuestion || {};
+  const { yueText, originalText } = currentQuestion || {};
 
   const mediaRecorderRef = useRef<MediaRecorder>(null);
   const wavesurferRef = useRef<any>(null);
@@ -337,6 +373,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     setPlaying(false);
     setDuration(0);
     setAudioBlob(null);
+    setRecordedAt(null);
     onReset?.();
   };
 
@@ -373,6 +410,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         });
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
+        setRecordedAt(new Date());
         setAudioBlob(blob as any);
 
         await transcribeAudio(blob);
@@ -482,6 +520,26 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     setPlaying(!playing);
   };
 
+  const downloadFileName =
+    recordedAt &&
+    buildRecordingDownloadName(originalText?.trim() || yueText?.trim() || "录音", recordedAt);
+
+  const handleDownloadWithNickname = () => {
+    if (!audioUrl || !recordedAt) return;
+    const nickname = window.prompt("请输入你的昵称");
+    if (nickname === null) return;
+    if (!nickname.trim()) {
+      alert("昵称不能为空");
+      return;
+    }
+    const filename = buildRecordingDownloadName(
+      originalText?.trim() || yueText?.trim() || "录音",
+      recordedAt,
+      nickname,
+    );
+    triggerAudioDownload(audioUrl, filename);
+  };
+
   return (
     <>
       {countdownDisplay && (
@@ -570,12 +628,18 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
         <div className="mt-3 flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:flex-wrap sm:justify-center sm:items-center sm:gap-3 sm:px-0">
           <a
             href={audioUrl}
-            download="recording.wav"
+            download={downloadFileName || "recording.wav"}
             className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
           >
-            <span className="sm:hidden">下载录音</span>
-            <span className="hidden sm:inline">下载录音（该功能建议在电脑端使用~）</span>
+            下载录音
           </a>
+          <button
+            type="button"
+            onClick={handleDownloadWithNickname}
+            className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
+          >
+            带昵称下载录音
+          </button>
           <button
             onClick={resetState}
             className="whitespace-nowrap rounded-full border border-white px-4 py-2 text-center text-sm text-white transition-colors duration-200 hover:bg-white hover:text-neutral-800 sm:py-1.5"
