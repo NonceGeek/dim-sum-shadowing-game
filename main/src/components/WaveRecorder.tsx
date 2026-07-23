@@ -175,42 +175,40 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     return () => clearInterval(interval);
   }, [transcribing]);
 
-  // 初始化wavesurfer
+  // 初始化 wavesurfer（绑定同一 audio 元素，仅作波形展示，避免双路播放）
   useEffect(() => {
-    if (WaveSurfer && waveformRef.current) {
-      wavesurferRef.current = WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: "#8ee085",
-        progressColor: "#8b5cf6",
-        cursorColor: "#333",
-        barWidth: 5,
-        barRadius: 3,
-        barGap: 2,
-        height: 16,
-        normalize: true,
-        interact: false,
-      });
+    const audio = playbackAudioRef.current;
+    if (!WaveSurfer || !waveformRef.current || !audio) return;
 
-      if (audioUrl) {
-        wavesurferRef.current.load(audioUrl);
-      }
-    }
+    const ws = WaveSurfer.create({
+      container: waveformRef.current,
+      media: audio,
+      waveColor: "#8ee085",
+      progressColor: "#8b5cf6",
+      cursorColor: "#333",
+      barWidth: 5,
+      barRadius: 3,
+      barGap: 2,
+      height: 16,
+      normalize: true,
+      interact: false,
+    });
+    wavesurferRef.current = ws;
 
     return () => {
-      if (wavesurferRef.current) {
-        wavesurferRef.current.destroy();
-      }
+      ws.destroy();
+      wavesurferRef.current = null;
       clearInterval(timerRef.current);
       cancelAnimationFrame(animationRef.current);
     };
-  }, [audioUrl]);
+  }, []);
 
   useEffect(() => {
     const audio = playbackAudioRef.current;
-    if (!audio || !audioUrl) return;
+    if (!audio || !audioUrl || !wavesurferRef.current) return;
 
     audio.src = audioUrl;
-    audio.load();
+    void wavesurferRef.current.load(audioUrl);
 
     if (!playAfterRecordingRef.current) return;
     playAfterRecordingRef.current = false;
@@ -554,38 +552,22 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     await beginRecording();
   };
 
-  // 点击播放录音，播完自动停止；播放中再次点击则从头重播
+  // 点击播放录音，播完自动停止；播放中再次点击则从头重播（仅驱动原生 audio）
   const startPlayback = async () => {
     const audio = playbackAudioRef.current;
-    if (audio) {
-      if (!audio.paused) {
-        audio.currentTime = 0;
-        if (!transcribing) {
-          wavesurferRef.current?.seekTo(0);
-          wavesurferRef.current?.play().catch(() => {});
-        }
-        return;
-      }
+    if (!audio || !audioUrl) return;
 
-      try {
-        if (audio.ended) audio.currentTime = 0;
-        await audio.play();
-        if (!transcribing) {
-          wavesurferRef.current?.seekTo(0);
-          wavesurferRef.current?.play().catch(() => {});
-        }
-      } catch (err) {
-        console.error("播放失败:", err);
-      }
+    if (!audio.paused) {
+      audio.currentTime = 0;
       return;
     }
 
-    if (!wavesurferRef.current) return;
-    if (wavesurferRef.current.isPlaying()) {
-      wavesurferRef.current.seekTo(0);
-      return;
+    try {
+      if (audio.ended) audio.currentTime = 0;
+      await audio.play();
+    } catch (err) {
+      console.error("播放失败:", err);
     }
-    wavesurferRef.current.play();
   };
 
   const playRecording = () => {
