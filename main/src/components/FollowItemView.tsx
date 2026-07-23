@@ -13,6 +13,7 @@ interface Question {
   originalText?: string;
   yueText?: string;
   audioUrl?: string;
+  videoUrl?: string;
   skipJyutpingFetch?: boolean;
 }
 
@@ -31,6 +32,7 @@ export default function FollowItemView({
   const [displayContent, setDisplayContent] = useState("");
   const [shareCopied, setShareCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const { setCurrentQuestion } = useQuestionStore();
 
   useEffect(() => {
@@ -63,32 +65,44 @@ export default function FollowItemView({
     router.push(backHref);
   };
 
-  const playAudio = () => {
-    if (audioRef.current) audioRef.current.play();
+  const currentQ = questions[quesNumber];
+  const isVideoMode = Boolean(currentQ?.videoUrl);
+
+  const playReference = () => {
+    if (isVideoMode) {
+      videoRef.current?.play();
+      return;
+    }
+    audioRef.current?.play();
   };
 
   const changePlaybackRate = (rate: number) => {
-    if (audioRef.current) {
-      setIsAudoSlowSpeed(rate === 0.5);
-      audioRef.current.playbackRate = rate;
+    setIsAudoSlowSpeed(rate === 0.5);
+    if (isVideoMode) {
+      if (videoRef.current) videoRef.current.playbackRate = rate;
+      return;
     }
+    if (audioRef.current) audioRef.current.playbackRate = rate;
   };
 
   const getResult = () => {
     setResult(true);
   };
 
-  const currentQ = questions[quesNumber];
-
   const stParam = (searchParams.get("st") ?? searchParams.get("text"))?.trim() ?? "";
   const audioParam = searchParams.get("audio")?.trim() ?? "";
-  const canShareLink = Boolean(stParam && audioParam);
+  const videoParam = searchParams.get("video")?.trim() ?? "";
+  const canShareLink = Boolean(stParam && (audioParam || videoParam));
 
   const copyShareLink = async () => {
     if (!canShareLink) return;
     try {
       await navigator.clipboard.writeText(
-        buildFreeShadowingShareUrl(stParam, audioParam),
+        buildFreeShadowingShareUrl(
+          stParam,
+          videoParam || audioParam,
+          videoParam ? "video" : "audio",
+        ),
       );
       setShareCopied(true);
       window.setTimeout(() => setShareCopied(false), 2000);
@@ -124,17 +138,32 @@ export default function FollowItemView({
             className="text-item relative mt-4 break-words rounded-2xl border-3 border-green-200 px-3 py-4 text-base font-bold leading-relaxed sm:text-lg sm:leading-12"
           >
             {displayContent}
-            <div
-              className="audio-icon text-2xl z-1000 h-[24px]"
-              onClick={playAudio}
-            >
-              <IoVolumeMediumSharp className="float-right" />
-            </div>
+            {!isVideoMode && (
+              <div
+                className="audio-icon text-2xl z-1000 h-[24px]"
+                onClick={playReference}
+              >
+                <IoVolumeMediumSharp className="float-right" />
+              </div>
+            )}
           </div>
 
-          <audio ref={audioRef} muted={false} src={currentQ?.audioUrl}>
-            <source type="audio/mpeg" />
-          </audio>
+          {isVideoMode ? (
+            <div className="mt-4 flex justify-center">
+              <video
+                ref={videoRef}
+                controls
+                playsInline
+                preload="metadata"
+                src={currentQ?.videoUrl}
+                className="w-full max-w-2xl rounded-xl border border-green-200/30"
+              />
+            </div>
+          ) : (
+            <audio ref={audioRef} muted={false} src={currentQ?.audioUrl}>
+              <source type="audio/mpeg" />
+            </audio>
+          )}
         </div>
         <div className="setting-wrapper mt-4 flex flex-col">
           <div className="speed-setting flex mt-3">
