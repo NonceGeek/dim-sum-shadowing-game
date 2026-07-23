@@ -57,6 +57,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const [playing, setPlaying] = useState(false);
   const [playTime, setPlayTime] = useState(0);
   const [feedbackRows, setFeedbackRows] = useState<string[][]>([]);
+  const [countdownDisplay, setCountdownDisplay] = useState<string | null>(null);
+  const [recordHintOpen, setRecordHintOpen] = useState(false);
   const { currentQuestion } = useQuestionStore();
   const { yueText } = currentQuestion || {};
 
@@ -72,6 +74,13 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   const skipTranscribeRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const countdownAbortedRef = useRef(false);
+  const countdownTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const countingDownRef = useRef(false);
+
+  const COUNTDOWN_STEPS = ["3", "2", "1", "开始！"] as const;
+  const COUNTDOWN_TICK_MS = 650;
+  const COUNTDOWN_START_MS = 550; // 650×3 + 550 = 2500ms
 
   const pickRecorderMimeType = () => {
     const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"];
@@ -79,6 +88,10 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   };
 
   const TRANSCRIBE_PROGRESS_MS = 15_000;
+
+  useEffect(() => {
+    setRecordHintOpen(true);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -262,6 +275,34 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     }
   };
 
+  const clearCountdown = () => {
+    countdownAbortedRef.current = true;
+    countingDownRef.current = false;
+    countdownTimersRef.current.forEach(clearTimeout);
+    countdownTimersRef.current = [];
+    setCountdownDisplay(null);
+  };
+
+  const waitForCountdown = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const id = setTimeout(resolve, ms);
+      countdownTimersRef.current.push(id);
+    });
+
+  const runCountdown = async () => {
+    countdownAbortedRef.current = false;
+    countingDownRef.current = true;
+    for (const step of COUNTDOWN_STEPS) {
+      if (countdownAbortedRef.current) return false;
+      setCountdownDisplay(step);
+      await waitForCountdown(step === "开始！" ? COUNTDOWN_START_MS : COUNTDOWN_TICK_MS);
+    }
+    countingDownRef.current = false;
+    if (countdownAbortedRef.current) return false;
+    setCountdownDisplay(null);
+    return true;
+  };
+
   // 停止录音（静音超时或内部调用）
   const stopRecording = () => {
     if (!mediaRecorderRef.current || !recordingRef.current) return;
@@ -283,6 +324,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   };
 
   const resetState = () => {
+    clearCountdown();
     if (recordingRef.current) {
       skipTranscribeRef.current = true;
       stopRecording();
@@ -300,13 +342,8 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
   useImperativeHandle(ref, () => ({ reset: resetState }));
 
-  // 开始录音
-  const startRecording = async () => {
-    if (recordingRef.current || transcribing) return;
-
-    // 评分完成后再次点击录制，先重置上一轮结果（含分数模块）
-    resetState();
-
+  // 开始录音（倒计时结束后调用）
+  const beginRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -419,6 +456,19 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
     }
   };
 
+  const startRecording = async () => {
+    if (recordingRef.current || transcribing || countingDownRef.current) return;
+
+    // 评分完成后再次点击录制，先重置上一轮结果（含分数模块）
+    resetState();
+    countdownAbortedRef.current = false;
+
+    const ready = await runCountdown();
+    if (!ready) return;
+
+    await beginRecording();
+  };
+
   // 播放/暂停录音
   const togglePlayback = () => {
     if (!audioUrl || !wavesurferRef.current) return;
@@ -434,22 +484,43 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
 
   return (
     <>
+      {countdownDisplay && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          aria-live="assertive"
+          aria-label={`录制倒计时：${countdownDisplay}`}
+        >
+          <span
+            key={countdownDisplay}
+            className="animate-pulse text-6xl font-bold text-green-200 sm:text-7xl"
+          >
+            {countdownDisplay}
+          </span>
+        </div>
+      )}
       <div className="flex min-w-0 items-center gap-1">
         {/* 录音控制面板 */}
         <div className="flex shrink-0 flex-col">
           <div className="flex space-x-4">
             <Tooltip
               title={
-                transcribing ? "识别中…" : recording ? "录音中，停止后将自动识别" : "点击录制"
+                transcribing
+                  ? "识别中…"
+                  : countdownDisplay
+                    ? "准备录制…"
+                    : recording
+                      ? "录音中，停止后将自动识别"
+                      : "点击录制"
               }
               color={"lime"}
               key={"lime"}
               placement="bottom"
-              defaultOpen={true}
+              open={recordHintOpen}
+              onOpenChange={setRecordHintOpen}
             >
               <button
                 onClick={startRecording}
-                disabled={recording || transcribing}
+                disabled={recording || transcribing || Boolean(countdownDisplay)}
                 className={`px-3 py-2 rounded-full font-bold text-lg duration-300 disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {recording ? (

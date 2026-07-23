@@ -149,17 +149,25 @@ Legacy alias: `POST /api/trans_cantonese` (same handler).
 
 **`task=translate`:** OpenRouter’s STT endpoint is transcribe-only. When `task=translate`, the server falls back to **`POST /v1/chat/completions`** with the same audio as `input_audio` and returns an English translation.
 
+Run from the **repository root** (sample file: `main/public/audio/yue1.m4a`).
+
+1. Start the API server: `cd deno && deno task dev`
+2. Confirm it is up: `curl --noproxy '*' http://127.0.0.1:3003/health`
+3. Transcribe (use `127.0.0.1` and `--noproxy '*'` if your shell has `http_proxy` set — otherwise `localhost` may return an empty `502` with no JSON body):
+
 ```bash
-curl -X POST http://localhost:3003/api/transcribe \
-  -F "file=@public/audio/yue1.m4a" \
+curl --noproxy '*' -X POST http://127.0.0.1:3003/api/transcribe \
+  -F "file=@main/public/audio/yue1.m4a" \
   -F "task=transcribe"
 ```
+
+If your shell cwd is `deno/`, use `../main/public/audio/yue1.m4a` instead.
 
 Translate to English:
 
 ```bash
-curl -X POST http://localhost:3003/api/transcribe \
-  -F "file=@public/audio/yue1.m4a" \
+curl --noproxy '*' -X POST http://127.0.0.1:3003/api/transcribe \
+  -F "file=@main/public/audio/yue1.m4a" \
   -F "task=translate" \
   -F "prompt=Casual Cantonese conversation"
 ```
@@ -178,8 +186,16 @@ curl -X POST http://localhost:3003/api/transcribe \
 |--------|------|--------|
 | `400` | `{ "error": "multipart field 'file' is required" }` | Missing `file` |
 | `400` | `{ "error": "could not read uploaded file" }` | Upload could not be read |
-| `500` | `{ "error": "Missing API_KEY" }` | `API_KEY` not set |
-| `500` | `{ "error": "..." }` | OpenRouter or server error (message in `error`) |
+| `500` | `{ "error": "Missing DASHSCOPE_API_KEY or API_KEY" }` | No transcription API key configured |
+| `500` | `{ "error": "..." }` | DashScope / OpenRouter or server error (message in `error`) |
+
+**Troubleshooting**
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| curl hangs or returns empty `502` | `http_proxy` / `https_proxy` intercepting `localhost` | Use `127.0.0.1` and `curl --noproxy '*'` |
+| `fail to open/read local data from file` | Wrong path to sample audio | Run from repo root with `@main/public/audio/yue1.m4a` |
+| No server response at all | API not running | `cd deno && deno task dev`, then hit `/health` |
 
 Requires env var **`API_KEY`** (OpenRouter API key). Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_SITE_TITLE`.
 

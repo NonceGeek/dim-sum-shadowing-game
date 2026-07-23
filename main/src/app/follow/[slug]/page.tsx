@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useState, useRef, useEffect } from "react";
+import { use, useState, useRef, useEffect } from "react";
 import { IoVolumeMediumSharp } from "react-icons/io5";
 import { useRouter } from "next/navigation";
 import category from "@/data/category";
@@ -8,7 +8,12 @@ import Footer from "@/components/Footer";
 import { useQuestionStore } from "@/stores/questionStore";
 import classNames from "classnames";
 
-export default function FolllowPageDetail({ params }: any) {
+export default function FolllowPageDetail({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = use(params);
   const router = useRouter();
   const [questions, setQuestions]: any = useState([]);
   const [hasReult, setResult]: any = useState(false);
@@ -40,10 +45,12 @@ export default function FolllowPageDetail({ params }: any) {
   };
 
   useEffect(() => {
-    const ques: any = category[params.slug]?.questions || [];
+    const ques: any =
+      (category as unknown as Record<string, { questions?: unknown[] }>)[slug]
+        ?.questions || [];
     setQuestions(ques);
     setCurrentQuestion(ques[0] || []);
-  }, []);
+  }, [slug, setCurrentQuestion]);
 
   return (
     <div className="">

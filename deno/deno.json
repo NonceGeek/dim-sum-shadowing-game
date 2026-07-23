@@ -1,7 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts",
-    "deploy": "deployctl deploy --prod --project=shadowing-game main.ts"
+    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts"
   },
   "imports": {
     "@deno/gfm": "jsr:@deno/gfm@^0.12.0",
@@ -12,6 +11,8 @@
     "app": "shadowing-game"
   }
 }
+
+
 
 
 

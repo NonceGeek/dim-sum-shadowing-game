@@ -2,8 +2,10 @@
  * Cantonese shadowing game API server.
  *
  * Environment variables:
- *   API_KEY                         – OpenRouter API key (required for transcription)
- *   OPENROUTER_TRANSCRIPTION_MODEL  – optional, default openai/gpt-4o-mini-transcribe
+ *   DASHSCOPE_API_KEY               – DashScope API key (primary for transcription)
+ *   DASHSCOPE_ASR_MODEL            – optional, default qwen3-asr-flash
+ *   API_KEY                         – OpenRouter API key (fallback for transcription)
+ *   OPENROUTER_TRANSCRIPTION_MODEL  – optional, default qwen/qwen3-asr-flash-2026-02-10
  *   OPENROUTER_HTTP_REFERER         – optional OpenRouter HTTP-Referer header
  *   OPENROUTER_SITE_TITLE           – optional OpenRouter X-OpenRouter-Title header
  *   SUPABASE_URL                    – Supabase project URL (required for /api/libs CRUD)
@@ -28,6 +30,9 @@ import {
 } from "./lib_crud.ts";
 import { handleToJyutping } from "./jyutping_utils.ts";
 
+const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") || "";
+const DASHSCOPE_ASR_MODEL =
+  Deno.env.get("DASHSCOPE_ASR_MODEL") || "qwen3-asr-flash";
 const OPENROUTER_KEY = Deno.env.get("API_KEY") || "";
 const TRANSCRIPTION_MODEL =
   Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") || "qwen/qwen3-asr-flash-2026-02-10";
@@ -40,9 +45,9 @@ initSupabase();
 const router = new Router();
 
 async function handleTranscribe(context: Context) {
-  if (!OPENROUTER_KEY) {
+  if (!DASHSCOPE_API_KEY && !OPENROUTER_KEY) {
     context.response.status = 500;
-    context.response.body = { error: "Missing API_KEY" };
+    context.response.body = { error: "Missing DASHSCOPE_API_KEY or API_KEY" };
     return;
   }
 
@@ -89,6 +94,8 @@ async function handleTranscribe(context: Context) {
 
     const text = await transcribeCantoneseAudio(
       {
+        dashScopeApiKey: DASHSCOPE_API_KEY,
+        dashScopeModel: DASHSCOPE_ASR_MODEL,
         apiKey: OPENROUTER_KEY,
         model: TRANSCRIPTION_MODEL,
         httpReferer: OPENROUTER_HTTP_REFERER,
@@ -178,10 +185,10 @@ router
       context.response.body = { error: "Could not load documentation" };
     }
   })
-  /* curl -X POST http://localhost:3003/api/transcribe \
-     -F "file=@public/audio/yue1.m4a" \
-     -F "language=yue" \
-     -F "task=transcribe"
+  /* From repo root (bypass http_proxy for localhost):
+     curl --noproxy '*' -X POST http://127.0.0.1:3003/api/transcribe \
+       -F "file=@main/public/audio/yue1.m4a" \
+       -F "task=transcribe"
   */
   // Cantonese audio via OpenRouter STT (/v1/audio/transcriptions); translate uses chat completions fallback.
   // Request: multipart/form-data with:

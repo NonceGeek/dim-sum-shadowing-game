@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { use, useState, useRef, useEffect } from "react";
 import { IoVolumeMediumSharp } from "react-icons/io5";
 import { Table } from "antd";
 import { useRouter } from "next/navigation";
@@ -9,7 +9,12 @@ import Game, { GameHandle, QuestionResult } from "@/components/Game";
 import Footer from "@/components/Footer";
 import { useQuestionStore } from "@/stores/questionStore";
 
-export default function FolllowPageDetail({ params }: any) {
+export default function FolllowPageDetail({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = use(params);
   const router = useRouter();
   const [questions, setQuestions]: any = useState([]);
   const [hasReult, setResult]: any = useState(false);
@@ -38,15 +43,15 @@ export default function FolllowPageDetail({ params }: any) {
 
   useEffect(() => {
     const categoryItem: { questions?: unknown[] } | undefined =
-      params.slug === "gfxm1"
+      slug === "gfxm1"
         ? categoryGfxm.gfxm1
         : (category as unknown as Record<string, { questions?: unknown[] }>)[
-            params.slug
+            slug
           ];
     const ques: any = categoryItem?.questions || [];
     setQuestions(ques);
     setCurrentQuestion(ques[0] || []);
-  }, [params.slug]);
+  }, [slug, setCurrentQuestion]);
 
   const resultsColumns = [
     { title: "题目", dataIndex: "index", key: "index", width: 60 },
