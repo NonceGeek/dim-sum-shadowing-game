@@ -170,6 +170,12 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
   }, []);
 
   useEffect(() => {
+    if (recording) {
+      setRecordHintOpen(true);
+    }
+  }, [recording]);
+
+  useEffect(() => {
     let mounted = true;
     const loadFeedbacks = async () => {
       try {
