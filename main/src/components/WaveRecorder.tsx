@@ -4,6 +4,7 @@ import WaveSurfer from "wavesurfer.js";
 import { Tooltip, Progress } from "antd";
 import { useQuestionStore } from "@/stores/questionStore";
 import { calculateTextSimilarity } from "@/utils/textSimilarity";
+import { convertArabicDigitsToChinese } from "@/utils/chineseNumerals";
 import { IoPulseSharp } from "react-icons/io5";
 
 const LEADERBOARD_SUBMIT_URL =
@@ -421,7 +422,7 @@ const WaveRecorder = forwardRef<WaveRecorderHandle, WaveRecorderProps>(
       }
 
       const data = await res.json();
-      const transcript: string = data.text ?? "";
+      const transcript: string = convertArabicDigitsToChinese(data.text ?? "");
       setTranscript(transcript);
       console.log("transcript", transcript);
       console.log("yueText", yueText);

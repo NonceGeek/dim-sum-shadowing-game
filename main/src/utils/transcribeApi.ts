@@ -1,3 +1,5 @@
+import { convertArabicDigitsToChinese } from "@/utils/chineseNumerals";
+
 const TRANS_API = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
 const RECORDER_TIMESLICE_MS = 250;
 
@@ -236,7 +238,8 @@ async function transcribeMediaFile(file: File): Promise<string> {
   }
 
   const data = await res.json();
-  return typeof data.text === "string" ? data.text.trim() : "";
+  const text = typeof data.text === "string" ? data.text.trim() : "";
+  return convertArabicDigitsToChinese(text);
 }
 
 function videoFileExtension(name: string, mimeType: string): string {
