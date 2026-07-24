@@ -123,7 +123,7 @@ export default function FollowItemView({
               <span className="shrink-0">原文:&nbsp;</span>
               <p className="min-w-0">{currentQ?.originalText}</p>
             </div>
-            {/* {canShareLink && (
+            {canShareLink && (
               <button
                 type="button"
                 onClick={copyShareLink}
@@ -131,7 +131,7 @@ export default function FollowItemView({
               >
                 {shareCopied ? "已复制链接！" : "👉复制分享链接"}
               </button>
-            )} */}
+            )}
           </div>
           <div
             key={`${quesNumber}-${displayContent}`}
